@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f5f1">
+  <meta name="color-scheme" content="light">
+  <title>Правило — локальная DEMO-панель</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar"><div class="shell topbar-inner">
+    <a class="brand" href="/" aria-label="Правило — главная"><span class="brand-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="m5 15 10-10M5 5h10v10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>правило<span class="demo-tag">DEMO</span></a>
+    <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection-text">Подключаемся…</span><button class="icon-button" id="refresh" type="button" aria-label="Обновить состояние" title="Обновить состояние">↻</button></div>
+  </div></header>
+  <main class="shell">
+    <div class="intro"><div><p class="eyebrow">ЛОКАЛЬНАЯ ПАНЕЛЬ</p><h1>Торговое правило</h1><p class="subtitle">Задайте условие. Передайте цену. Проследите результат.</p></div><span class="environment"><span class="dot"></span>Только тестовые данные</span></div>
+    <div class="demo-notice"><strong>Средства не используются.</strong> Здесь нет кошельков и реальных сделок. Все цены, суммы и результаты — DEMO.</div>
+    <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+    <div class="workspace">
+      <section class="main-column" aria-label="Управление правилом">
+        <section class="card" id="create-card">
+          <div class="card-heading"><div><p class="eyebrow">ШАГ 1</p><h2>Создайте правило</h2></div><span class="soft-tag">Разовая покупка</span></div>
+          <p class="muted form-intro">Тестовые значения можно менять. Создание не включает правило.</p>
+          <form id="create-form" novalidate>
+            <label for="asset">Тестовый актив</label>
+            <select id="asset" name="assetId"><option value="DEMO:ASSET-A">DEMO:ASSET-A · актив A</option><option value="DEMO:ASSET-B">DEMO:ASSET-B · актив B</option></select><small class="field-error" data-error="assetId" id="asset-error"></small>
+            <div class="field-grid">
+              <div><label for="threshold">Цена не выше</label><div class="input-unit"><input id="threshold" name="threshold" inputmode="decimal" value="1.00" aria-describedby="threshold-help threshold-error" required><span>DEMO:QUOTE-A</span></div><small id="threshold-help" class="help">За 1 условную единицу актива</small><small class="field-error" data-error="threshold" id="threshold-error"></small></div>
+              <div><label for="amount">Сумма покупки</label><div class="input-unit"><input id="amount" name="amount" inputmode="decimal" value="10.00" aria-describedby="amount-error" required><span>DEMO:QUOTE-A</span></div><small class="help">Условная валюта, не SOL и не USD</small><small class="field-error" data-error="amount" id="amount-error"></small></div>
+            </div>
+            <label for="expiry">Срок действия</label><div class="input-unit expiry-input"><input type="number" id="expiry" name="expiresInMinutes" min="1" max="1440" step="1" value="10" aria-describedby="expiry-error" required><span>минут</span></div><small class="field-error" data-error="expiresInMinutes" id="expiry-error"></small>
+            <p class="help limits-note">Ограничения имитации: комиссия до 0,01 DEMO:QUOTE-A; получение не меньше 1 условной единицы актива. Это не рыночная котировка.</p>
+            <div class="form-actions"><button class="button primary" type="submit">Создать правило <span aria-hidden="true">→</span></button><button class="button secondary" type="button" id="cancel-create" hidden>Назад к правилу</button></div>
+          </form>
+        </section>
+        <section class="card rule-card" id="rule-card" hidden aria-label="Текущее правило"></section>
+        <section class="card price-card" aria-label="Последняя цена"><div><p class="eyebrow">ПОСЛЕДНЯЯ ЦЕНА</p><div id="last-price" class="price-value">—</div><p id="price-unit" class="help">DEMO:QUOTE-A за 1 ед. актива</p></div><div id="price-time" class="price-time">Ожидаем первое<br>тестовое событие</div></section>
+      </section>
+      <aside class="card demo-console" aria-labelledby="demo-title">
+        <div class="card-heading"><div><p class="eyebrow">ШАГ 2 · ТЕСТОВЫЙ ИСТОЧНИК</p><h2 id="demo-title">DEMO-пульт</h2></div><span class="console-symbol" aria-hidden="true">⌁</span></div>
+        <p class="muted">Отправьте цену в ядро. Условие и возможность исполнения проверит правило.</p>
+        <form id="price-form" novalidate>
+          <label for="demo-price">Новая цена</label><div class="input-unit large-input"><input id="demo-price" name="price" inputmode="decimal" value="0.90" aria-describedby="demo-price-unit price-error" required><span>DEMO:QUOTE-A</span></div><small id="demo-price-unit" class="help">За 1 условную единицу актива</small><small class="field-error" data-error="price" id="price-error"></small>
+          <fieldset class="outcomes"><legend>Результат при срабатывании</legend><div class="outcome-grid">
+            <label class="outcome"><input type="radio" name="outcome" value="succeeded" checked><span class="outcome-icon good" aria-hidden="true">✓</span><span>Успех</span></label>
+            <label class="outcome"><input type="radio" name="outcome" value="failed"><span class="outcome-icon bad" aria-hidden="true">×</span><span>Неудача</span></label>
+            <label class="outcome"><input type="radio" name="outcome" value="unknown"><span class="outcome-icon uncertain" aria-hidden="true">?</span><span>Неизвестно</span></label>
+          </div></fieldset>
+          <p class="help">Выбор не меняет уже отправленную операцию и не снимает её блокировки.</p>
+          <button class="button dark full" type="submit" id="send-price" disabled>Передать цену <span aria-hidden="true">→</span></button>
+          <p id="console-hint" class="help centered">Сначала создайте правило.</p>
+        </form>
+        <details class="stream-demo"><summary>Проверить остановку потока</summary><p class="help">Создаёт тестовый случай проверки истории. Данные остаются в локальном журнале, правило приостановится.</p><button class="button secondary full" type="button" id="interrupt-stream" disabled>Остановить поток · DEMO</button></details>
+      </aside>
+    </div>
+    <section class="card journal" aria-labelledby="journal-title"><div class="card-heading"><div><p class="eyebrow">СОХРАНЁННАЯ ИСТОРИЯ</p><h2 id="journal-title">События и операции</h2></div><span class="soft-tag" id="journal-count">0 записей</span></div><div id="journal-list"><div class="empty-log"><span aria-hidden="true">≋</span><p>История начнётся с первого правила</p><small>События и результаты останутся здесь после перезапуска.</small></div></div><details id="archive" hidden><summary>Предыдущие правила</summary><div id="archive-list"></div></details></section>
+    <footer><span>Локальный доверенный DEMO-доступ · без настоящей авторизации</span><span>Состояние хранится в SQLite</span></footer>
+  </main>
+  <dialog id="revoke-dialog"><div class="dialog-inner"><span class="eyebrow">ОКОНЧАТЕЛЬНЫЙ ОТЗЫВ</span><h2>Отозвать правило?</h2><p>Включить его снова будет нельзя. История сохранится. Уже переданная операция и её неизвестный исход не отменяются.</p><div class="form-actions"><button class="button danger" id="confirm-revoke" type="button">Окончательно отозвать</button><button class="button secondary" id="cancel-revoke" type="button">Оставить правило</button></div></div></dialog>
+</body>
+</html>

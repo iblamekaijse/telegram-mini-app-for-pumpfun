@@ -1,0 +1,12 @@
+# Local runtime state and credentials must never be published.
+node_modules/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.log

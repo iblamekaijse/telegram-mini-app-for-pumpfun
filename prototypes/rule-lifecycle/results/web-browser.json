@@ -1,0 +1,22 @@
+{
+  "browser": "Chromium / Python Playwright",
+  "checks": [
+    "field_validation_visible",
+    "create_enable_high_price_low_price_success_reload_desktop",
+    "server_SIGKILL_restart_restores_same_single_success",
+    "unknown_persists_stream_recovery_cannot_enable_accept_gap_disabled",
+    "mobile_no_overflow_and_final_revocation_keeps_unknown",
+    "failure_terminal_and_old_history_preserved"
+  ],
+  "pageErrors": [],
+  "desktop": [
+    1440,
+    1050
+  ],
+  "mobile": [
+    390,
+    844
+  ],
+  "result": "passed",
+  "mode": "synthetic DEMO only"
+}

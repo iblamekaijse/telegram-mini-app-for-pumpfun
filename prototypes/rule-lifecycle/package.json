@@ -1,0 +1,15 @@
+{
+  "name": "demo-rule-lifecycle",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node web/server.mjs",
+    "demo": "node demo.mjs",
+    "demo:restart": "node restart-demo.mjs",
+    "demo:source": "node source-demo.mjs",
+    "demo:owner": "node owner-demo.mjs",
+    "test": "node --test --test-reporter=tap rule-engine.test.mjs persistence.test.mjs source.test.mjs owner-decisions.test.mjs web.test.mjs"
+  }
+}
