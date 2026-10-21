@@ -1,0 +1,188 @@
+const $ = id => document.getElementById(id);
+const quote = 'DEMO:QUOTE-A';
+const number = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = units => number.format(units / 100);
+const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const labels = { draft: 'Черновик', active: 'Включено', paused: 'На паузе', finished: 'Попытка завершена', expired: 'Срок истёк', revoked: 'Отозвано',
+  prepared: 'Подготовлена', submitted: 'Ожидаем исход', succeeded: 'Успех', failed: 'Неудача', unknown: 'Исход неизвестен', cancelled: 'Отменена до передачи' };
+const dispositions = { prepared: 'Условие выполнено — операция подготовлена', ignored_inactive: 'Цена сохранена; правило не включено', ignored_reserved: 'Новая операция не создана: попытка уже зарезервирована',
+  condition_not_met: 'Условие цены пока не выполнено', ignored_stale: 'Событие устарело и не использовано', ignored_future: 'Время события из будущего — исполнение запрещено',
+  ignored_asset: 'Событие другого актива пропущено', ignored_incompatible_price: 'Размерность цены не совпадает с правилом', ignored_out_of_order: 'Более старая цена пропущена',
+  ignored_history_recovery: 'История проверена; накопленный сигнал не исполняется', ignored_before_resolution: 'Цена возникла до решения владельца — сигнал пропущен' };
+let model, signature = '', busy = false, connected = false, creating = false, revision = 0;
+let revokeTarget;
+const pendingKeys = new Map();
+const current = () => model?.rules.find(rule => rule.config.id === model.currentRuleId);
+const terminal = rule => ['finished', 'expired', 'revoked'].includes(rule.state);
+const pill = status => `<span class="state-pill ${escape(status)}">${escape(labels[status] ?? status)}</span>`;
+const date = value => new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const time = value => new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function feedback(text, kind = '') { $('feedback').textContent = text; $('feedback').className = `feedback ${kind}`; $('feedback').hidden = !text; }
+function updateControls() {
+  const rule = current();
+  document.body.classList.toggle('busy', busy);
+  document.querySelectorAll('button[data-action], #create-form button[type=submit]').forEach(button => { button.disabled = busy || !connected; });
+  $('send-price').disabled = busy || !connected || !rule || rule.stream.continuity !== 'continuous' || terminal(rule);
+  $('interrupt-stream').disabled = busy || !connected || !rule || rule.stream.continuity !== 'continuous' || terminal(rule);
+  $('confirm-revoke').disabled = busy || !connected;
+  $('create-form').querySelector('button[type=submit]').setAttribute('aria-busy', String(busy));
+  $('send-price').setAttribute('aria-busy', String(busy));
+  $('connection-text').textContent = connected ? 'Сохранено локально' : 'Нет связи с сервером';
+  $('connection-dot').classList.toggle('offline', !connected);
+  $('console-hint').textContent = !rule ? 'Сначала создайте правило.' : rule.stream.continuity !== 'continuous' ? 'Сначала разрешите остановку потока.'
+    : terminal(rule) ? 'Попытка закрыта. Для нового теста создайте отдельное правило.'
+      : rule.state === 'active' ? 'Событие получит текущее время и сохранится в журнале.' : 'Цена сохранится, но выключенное правило не исполнится.';
+}
+function clearErrors() {
+  document.querySelectorAll('[data-error]').forEach(el => { el.textContent = ''; });
+  document.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+}
+function showFields(fields) {
+  for (const [name, message] of Object.entries(fields)) {
+    const output = document.querySelector(`[data-error="${name}"]`);
+    if (output) { output.textContent = message; document.querySelector(`[name="${name}"]`)?.setAttribute('aria-invalid', 'true'); }
+  }
+  document.querySelector('[aria-invalid=true]')?.focus();
+}
+function renderRule(rule) {
+  if (!rule) return;
+  const config = rule.config, last = rule.operations.at(-1), unknown = rule.operations.some(op => op.status === 'unknown');
+  let notice = '';
+  if (unknown) notice += '<div class="notice"><strong>Исход операции неизвестен</strong>Имитатор не сообщил подтверждённый результат. Повторная покупка по этому правилу запрещена, в том числе после перезапуска или проверки потока. Можно изучить журнал и окончательно отозвать правило.</div>';
+  if (rule.stream.continuity === 'decision_required') {
+    const reason = rule.stream.issue.reason === 'demo_stream_interruption' ? 'В DEMO вручную запрошена проверка непрерывности потока.'
+      : rule.stream.issue.reason === 'history_unavailable' ? 'Источник не подтвердил доступность необходимой истории.' : 'Нарушены порядок, идентичность или непрерывность событий.';
+    notice += `<div class="notice"><strong>Поток требует решения владельца</strong>${reason} Автоматическое исполнение приостановлено. Проверка доступного журнала не исполнит накопленные сигналы и не снимет неизвестный исход.
+      <div class="notice-actions"><button class="button secondary" type="button" data-action="retry_history">Проверить историю</button><button class="button secondary" type="button" disabled title="Нет проверяемого контракта новой точки отсчёта">Принять пропуск · недоступно</button></div></div>`;
+  } else if (rule.state === 'draft') notice += '<div class="notice neutral"><strong>Правило создано, но ещё не включено</strong>Включите его, затем передайте тестовую цену через DEMO-пульт.</div>';
+  else if (rule.state === 'active') notice += '<div class="notice neutral"><strong>Ожидаем подходящую цену</strong>Включённое правило выполнит только одну попытку покупки. Все проверки и исполнение здесь синтетические.</div>';
+  else if (rule.state === 'paused' && !unknown) notice += '<div class="notice neutral"><strong>Новые операции приостановлены</strong>Для продолжения явно включите правило. Уже отправленная операция, если она есть, не отменяется паузой.</div>';
+  else if (last?.status === 'failed') notice += '<div class="notice"><strong>Попытка завершилась неудачей</strong>Это правило больше не исполняется. Автоматического повторения не будет.</div>';
+  else if (rule.state === 'revoked' && !unknown) notice += '<div class="notice neutral"><strong>Правило окончательно отозвано</strong>Включить его снова нельзя. История событий и операций сохранена.</div>';
+  let buttons = '';
+  if (['draft', 'paused'].includes(rule.state) && !rule.submittedOperationId && rule.stream.continuity === 'continuous') buttons += '<button class="button primary" data-action="enable" type="button">Включить правило →</button>';
+  if (rule.state === 'active') buttons += '<button class="button secondary" data-action="pause" type="button">Приостановить</button>';
+  if (!terminal(rule)) buttons += '<button class="button danger-outline" data-action="revoke" type="button">Отозвать правило</button>';
+  if (terminal(rule)) buttons += '<button class="button primary" data-action="new" type="button">Новое DEMO-правило →</button>';
+  $('rule-card').innerHTML = `<div class="card-heading"><div><p class="eyebrow">РАЗОВАЯ ПОКУПКА</p><h2>Ваше правило</h2></div>${pill(rule.state)}</div>
+    <div class="rule-asset"><span class="asset-mark" aria-hidden="true">${escape(config.assetId.slice(-1))}</span>${escape(config.assetId)}</div>
+    <div class="rule-grid"><div><p class="label">Цена не выше</p><p class="value">${money(config.condition.thresholdUnits)}<small>${quote} за 1 ед. актива</small></p></div>
+    <div><p class="label">Сумма покупки</p><p class="value">${money(config.amountUnits)}<small>${quote}</small></p></div>
+    <div><p class="label">Действует до</p><p class="value">${date(config.expiresAtMs)}<small>По местному времени браузера</small></p></div>
+    <div><p class="label">Результат операции</p><p class="value">${last ? escape(labels[last.status]) : 'Ещё нет операции'}<small>${last ? 'Отдельно от состояния правила' : 'Покупка пока не передавалась имитатору'}</small></p></div></div>
+    ${notice}<div class="rule-actions">${buttons}</div><details class="rule-detail"><summary>Ограничения имитации</summary><p>Общий расход ≤ ${money(config.limits.maxTotalSpendUnits)} ${quote}; комиссия ≤ ${money(config.limits.maxFeeUnits)} ${quote}; получение ≥ ${config.limits.minReceiveUnits} услов. ед. актива. Возраст события ≤ ${config.limits.maxEventAgeMs / 1000} с. Проверки локальные, не блокчейн.</p></details>`;
+  const lastEvent = rule.events.filter(entry => entry.sourceRecord).at(-1);
+  $('last-price').textContent = lastEvent ? money(lastEvent.sourceRecord.payload.priceUnits) : '—';
+  $('price-unit').textContent = `${quote} за 1 ед. ${config.assetId}`;
+  $('price-time').innerHTML = lastEvent ? `<strong>Получено ${time(lastEvent.result.receivedAtMs)}</strong>Возникло ${time(lastEvent.sourceRecord.occurredAtMs)}` : 'Ожидаем первое<br>тестовое событие';
+}
+function renderJournal() {
+  const rows = [];
+  for (const rule of model.rules) {
+    const archived = rule.config.id !== model.currentRuleId;
+    const suffix = `${rule.config.assetId}${archived ? ' · предыдущее правило' : ''}`;
+    rows.push({ at: rule.createdAtMs, rank: 0, icon: '+', title: 'Правило создано', description: `${suffix} · разовая покупка`, status: '' });
+    for (const event of rule.events.filter(e => e.sourceRecord)) rows.push({ at: event.result.receivedAtMs, rank: 1, icon: '⌁',
+      title: `Цена ${money(event.sourceRecord.payload.priceUnits)} ${quote}`, description: `${dispositions[event.result.disposition] ?? 'Событие обработано'} · ${suffix}`, status: '' });
+    for (const op of rule.operations) {
+      let description = `Операция ${op.id.replace('demo-operation-', '')} · ${suffix}`;
+      if (op.result?.receipt) description += ` · расход ${money(op.result.receipt.spentUnits)} ${quote}, получение ${op.result.receipt.receivedUnits} услов. ед.`;
+      if (op.status === 'unknown') description += ' · повтор запрещён';
+      rows.push({ at: op.updatedAtMs, rank: 2, icon: op.status === 'succeeded' ? '✓' : op.status === 'unknown' ? '?' : '→',
+        title: op.status === 'succeeded' ? 'Покупка имитирована' : `Операция: ${labels[op.status]}`, description, status: op.status });
+    }
+    for (const entry of rule.decisions) rows.push({ at: entry.decidedAtMs, rank: 3, icon: '↻', title: entry.outcome === 'history_verified' ? 'История проверена владельцем DEMO'
+      : entry.outcome === 'rule_revoked' ? 'Правило окончательно отозвано' : 'Решение по потоку сохранено',
+      description: `${suffix} · ${entry.outcome === 'history_verified' ? 'Нужны отдельное включение и свежие данные' : 'История решения сохранена'}`, status: '' });
+  }
+  rows.sort((a, b) => b.at - a.at || b.rank - a.rank);
+  $('journal-count').textContent = `Всего: ${rows.length}`;
+  if (rows.length) $('journal-list').innerHTML = rows.slice(0, 40).map(row => `<div class="log-row"><span class="log-icon" aria-hidden="true">${escape(row.icon)}</span><div><p class="log-title">${escape(row.title)}</p><p class="log-description">${escape(row.description)}</p>${row.status ? `<div class="log-meta">${pill(row.status)}</div>` : ''}</div><time class="log-time">${time(row.at)}<br>${date(row.at).split(',')[0]}</time></div>`).join('');
+  const archived = model.rules.filter(rule => rule.config.id !== model.currentRuleId);
+  $('archive').hidden = !archived.length;
+  $('archive-list').innerHTML = archived.map(rule => `<div class="archive-row"><span>${escape(rule.config.assetId)} · ${date(rule.createdAtMs)}</span>${pill(rule.state)}</div>`).join('');
+}
+function render(data, force = false) {
+  model = data; connected = true;
+  const next = JSON.stringify([data.currentRuleId, data.rules]);
+  if (force || next !== signature) {
+    signature = next;
+    const rule = current();
+    $('create-card').hidden = !!rule && !creating;
+    $('rule-card').hidden = !rule || creating;
+    $('cancel-create').hidden = !rule;
+    renderRule(rule); renderJournal();
+  }
+  updateControls();
+}
+async function load() {
+  const version = revision;
+  try {
+    const response = await fetch('/api/state');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message);
+    if (!busy && version === revision) {
+      const restored = !connected && !!model;
+      render(data);
+      if (restored) feedback('Соединение восстановлено. Показано сохранённое состояние.');
+    }
+  } catch (error) {
+    if (version === revision) { connected = false; updateControls(); feedback(error.message === 'Failed to fetch' ? 'Сервер недоступен. Показаны последние полученные данные; действия остановлены.' : error.message, 'error'); }
+  }
+}
+async function mutate(path, body, { form = null, message = '' } = {}) {
+  if (busy || !connected) return;
+  busy = true; revision++; clearErrors(); feedback('Сохраняем и обрабатываем запрос…'); updateControls();
+  const identity = JSON.stringify([path, body]);
+  if (!pendingKeys.has(identity)) pendingKeys.set(identity, crypto.randomUUID());
+  try {
+    const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, requestId: pendingKeys.get(identity) }) });
+    const data = await response.json();
+    if (!response.ok) {
+      showFields(data.fields ?? {});
+      throw new Error(data.message);
+    }
+    pendingKeys.delete(identity); creating = false; render(data, true);
+    if (form === 'price') {
+      const disposition = data.delivery?.disposition;
+      const rule = current(), operation = rule.operations.at(-1);
+      const text = disposition === 'prepared' && operation ? operation.status === 'succeeded' ? 'Условие выполнено. Имитатор сообщил об успешной покупке.'
+        : operation.status === 'failed' ? 'Условие выполнено. Имитатор сообщил о неудаче; автоматического повтора нет.' : 'Условие выполнено, но исход неизвестен. Повторная попытка заблокирована.'
+        : dispositions[disposition] ?? 'Событие обработано. Состояние сохранено.';
+      feedback(text, operation?.status === 'unknown' || operation?.status === 'failed' ? 'warning' : '');
+    } else if (data.decisionResult?.decision === 'retry_history') {
+      const result = data.decisionResult;
+      const unknown = current().operations.some(op => op.status === 'unknown');
+      if (result.outcome !== 'history_verified') feedback(result.outcome === 'terminal_rule' ? 'Правило уже закрыто или его срок истёк. Исполнение не возобновлено.' : 'Историю не удалось подтвердить. Исполнение остаётся остановленным.', 'warning');
+      else if (unknown) feedback('История потока проверена. Неизвестный исход операции сохраняется; повторное исполнение правила запрещено.', 'warning');
+      else if (terminal(current())) feedback('История проверена, но правило уже закрыто. Включить его снова нельзя.', 'warning');
+      else feedback('История проверена. Для продолжения явно включите правило и передайте новое свежее событие.');
+    } else feedback(message || 'Изменение сохранено.');
+  } catch (error) {
+    feedback(error.message === 'Failed to fetch' ? 'Связь прервалась. Исход запроса не подтверждён. Обновите состояние; повтор того же действия использует прежний ключ запроса.' : error.message, 'error');
+  } finally { busy = false; updateControls(); }
+}
+$('create-form').addEventListener('submit', event => {
+  event.preventDefault(); mutate('/api/rules', Object.fromEntries(new FormData(event.currentTarget)), { message: 'Правило создано. Теперь включите его.' });
+});
+$('price-form').addEventListener('submit', event => {
+  event.preventDefault(); if (current()) mutate(`/api/rules/${current().config.id}/price`, Object.fromEntries(new FormData(event.currentTarget)), { form: 'price' });
+});
+$('rule-card').addEventListener('click', event => {
+  const button = event.target.closest('[data-action]'); if (!button || button.disabled) return;
+  const action = button.dataset.action, rule = current();
+  if (action === 'new') { creating = true; render(model, true); clearErrors(); $('create-card').querySelector('h2').textContent = 'Новое DEMO-правило'; $('asset').focus(); return; }
+  if (action === 'revoke') { revokeTarget = { ruleId: rule.config.id, incidentId: rule.stream.continuity === 'decision_required' ? rule.stream.issue.id : undefined }; $('revoke-dialog').showModal(); return; }
+  const incidentId = rule.stream.continuity === 'decision_required' ? rule.stream.issue.id : undefined;
+  mutate(`/api/rules/${rule.config.id}/${action}`, { incidentId }, { message: action === 'enable' ? 'Правило включено. Передайте тестовую цену через DEMO-пульт.'
+    : action === 'pause' ? 'Новые операции приостановлены. Переданная операция не отменяется.' : 'История проверена. Для продолжения нужны явное включение и свежие данные; неизвестный исход остаётся заблокированным.' });
+});
+$('confirm-revoke').addEventListener('click', () => {
+  $('revoke-dialog').close();
+  mutate(`/api/rules/${revokeTarget.ruleId}/revoke`, { incidentId: revokeTarget.incidentId }, { message: 'Правило окончательно отозвано. История и исход ранее переданной операции сохранены.' });
+});
+$('cancel-revoke').addEventListener('click', () => $('revoke-dialog').close());
+$('cancel-create').addEventListener('click', () => { creating = false; render(model, true); });
+$('interrupt-stream').addEventListener('click', () => mutate(`/api/rules/${current().config.id}/demo-interruption`, {}, { message: 'Создан DEMO-случай проверки истории. Исполнение остановлено до решения владельца.' }));
+$('refresh').addEventListener('click', load);
+load(); setInterval(() => { if (!busy) load(); }, 2000);

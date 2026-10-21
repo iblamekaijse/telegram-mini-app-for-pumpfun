@@ -1,0 +1,142 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { RuleEngine } from '../rule-engine.mjs';
+import { SimulatedExecutor } from '../simulator.mjs';
+import { SyntheticSource } from '../synthetic-source.mjs';
+import { SourceConsumer } from '../source-consumer.mjs';
+import { createTrustedDemoOwnerContext } from '../demo-owner.mjs';
+import { DEMO_PRICE_BASIS } from '../fixtures.mjs';
+
+export const ASSETS = ['DEMO:ASSET-A', 'DEMO:ASSET-B'];
+const outcomes = ['succeeded', 'failed', 'unknown'];
+export class PanelError extends Error {
+  constructor(code, message, fields = {}, status = 400) {
+    super(message); this.code = code; this.fields = fields; this.status = status;
+  }
+}
+function requestKey(value) {
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{8,64}$/.test(value)) throw new PanelError('INVALID_REQUEST_ID', 'Не удалось распознать запрос. Повторите действие.');
+  return value;
+}
+function money(value, field) {
+  const text = String(value ?? '').trim().replace(',', '.');
+  if (!/^\d{1,7}(\.\d{1,2})?$/.test(text)) throw new PanelError('INVALID_FIELDS', 'Проверьте поля формы.', { [field]: 'Введите положительное число, не больше двух знаков после запятой.' });
+  const [whole, fraction = ''] = text.split('.');
+  const units = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  if (units < 1) throw new PanelError('INVALID_FIELDS', 'Проверьте поля формы.', { [field]: 'Значение должно быть больше нуля.' });
+  return units;
+}
+
+/** Thin local UI adapter. All rule/operation decisions remain in RuleEngine. */
+export async function createPanelService({ dataDir, clock = Date.now }) {
+  let initialize = false;
+  try { mkdirSync(dataDir); initialize = true; }
+  catch (error) { if (error.code !== 'EEXIST') throw error; }
+  let engine;
+  class PanelSimulator extends SimulatedExecutor {
+    submit(intent) {
+      const outcome = engine.getOperation(intent.operationId).event.sourceEvent?.demoOutcome;
+      if (!outcomes.includes(outcome)) throw new Error('Missing persisted demo outcome');
+      return new SimulatedExecutor({ outcome }).submit(intent);
+    }
+  }
+  engine = RuleEngine[initialize ? 'initialize' : 'open']({ storagePath: join(dataDir, 'state.sqlite'), clock, executor: new PanelSimulator() });
+  const rules = () => engine.listRules();
+  const current = () => rules().at(-1);
+  const history = id => engine.getEventLog(id).filter(e => e.sourceRecord).map(e => e.sourceRecord).sort((a, b) => a.position - b.position);
+  const sourceFor = (id, records = history(id)) => new SyntheticSource({ sourceId: engine.getSourceState(id).sourceId, events: records });
+  const consumerFor = (id, source = sourceFor(id)) => new SourceConsumer({ engine, ruleId: id, source });
+  const ensureBinding = rule => {
+    try { engine.getSourceState(rule.config.id); }
+    catch (error) {
+      if (error.code !== 'SOURCE_NOT_BOUND') throw error;
+      engine.bindSource(rule.config.id, { sourceId: `DEMO:panel-${rule.config.id}` }, { requestId: `bind:${rule.config.id}` });
+    }
+  };
+  try {
+    for (const rule of rules()) {
+      if (rule.config.panel?.version !== 1) throw new Error('Panel requires its own data directory');
+      ensureBinding(rule);
+    }
+    // The consumer verifies the retained synthetic log before resuming a prepared intent.
+    // Opening the engine itself never dispatches; submitted-without-result recovers unknown.
+    if (current()) await consumerFor(current().config.id).drain();
+  } catch (error) { engine.close(); throw error; }
+
+  function requireRule(id) {
+    if (!rules().some(rule => rule.config.id === id)) throw new PanelError('RULE_NOT_FOUND', 'Правило не найдено.', {}, 404);
+    return engine.getRule(id);
+  }
+  function state() {
+    return { mode: 'demo', liveTradingAllowed: false, now: clock(), currentRuleId: current()?.config.id ?? null,
+      rules: rules().map(rule => ({ ...rule, stream: engine.getSourceState(rule.config.id),
+        events: engine.getEventLog(rule.config.id), operations: rule.operationIds.map(id => engine.getOperation(id)),
+        decisions: engine.getSourceDecisionLog(rule.config.id) })) };
+  }
+  function create(body) {
+    const key = requestKey(body.requestId);
+    const fields = {};
+    if (!ASSETS.includes(body.assetId)) fields.assetId = 'Выберите тестовый актив.';
+    const minutes = Number(body.expiresInMinutes);
+    if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 1440) fields.expiresInMinutes = 'Укажите целое число от 1 до 1440 минут.';
+    const values = {};
+    for (const field of ['threshold', 'amount']) {
+      try { values[field] = money(body[field], field); }
+      catch (error) { Object.assign(fields, error.fields); }
+    }
+    if (Object.keys(fields).length) throw new PanelError('INVALID_FIELDS', 'Проверьте поля формы.', fields);
+    const input = { assetId: body.assetId, thresholdUnits: values.threshold, amountUnits: values.amount, expiresInMinutes: minutes };
+    const id = `web-${key}`, prior = rules().find(rule => rule.config.id === id);
+    if (prior && JSON.stringify(prior.config.panel.input) !== JSON.stringify(input)) throw new PanelError('IDEMPOTENCY_CONFLICT', 'Этот запрос уже использован с другими параметрами.', {}, 409);
+    if (!prior && current() && !['finished', 'expired', 'revoked'].includes(current().state)) {
+      throw new PanelError('RULE_ALREADY_OPEN', 'Сначала окончательно отзовите текущее правило. Его история сохранится.', {}, 409);
+    }
+    const config = prior?.config ?? {
+      id, assetId: input.assetId,
+      condition: { metric: 'priceUnits', operator: 'lte', thresholdUnits: input.thresholdUnits, priceBasis: { ...DEMO_PRICE_BASIS } },
+      amountUnits: input.amountUnits,
+      limits: { maxTotalSpendUnits: input.amountUnits + 1, minReceiveUnits: 1, maxFeeUnits: 1, maxSlippageBps: 50, maxEventAgeMs: 30_000 },
+      expiresAtMs: clock() + minutes * 60_000,
+      panel: { version: 1, input },
+    };
+    engine.createRule(config, { requestId: `create:${key}` });
+    ensureBinding(engine.getRule(id));
+    return state();
+  }
+  async function price(id, body) {
+    const rule = requireRule(id), key = requestKey(body.requestId), priceUnits = money(body.price, 'price');
+    if (!outcomes.includes(body.outcome)) throw new PanelError('INVALID_FIELDS', 'Выберите результат имитатора.', { outcome: 'Недопустимый результат.' });
+    const records = history(id), eventId = `panel-price-${key}`, prior = records.find(e => e.eventId === eventId);
+    if (prior && (prior.payload.priceUnits !== priceUnits || prior.demoOutcome !== body.outcome)) throw new PanelError('IDEMPOTENCY_CONFLICT', 'Этот запрос уже передавал другую цену или результат.', {}, 409);
+    if (!prior && current()?.config.id !== id) throw new PanelError('ARCHIVED_RULE', 'Это правило уже в архиве. Выберите текущее правило.', {}, 409);
+    if (engine.getSourceState(id).continuity !== 'continuous') throw new PanelError('SOURCE_DECISION_REQUIRED', 'Поток остановлен. Проверьте историю или окончательно отзовите правило.', {}, 409);
+    const record = prior ?? { version: 1, sourceId: engine.getSourceState(id).sourceId, eventId,
+      position: records.length + 1, assetId: rule.config.assetId, occurredAtMs: clock(), type: 'synthetic-price',
+      payload: { ...DEMO_PRICE_BASIS, priceUnits }, demoOutcome: body.outcome };
+    const source = sourceFor(id, prior ? records : [...records, record]);
+    if (prior) source.replayOnNextConnect([prior.position]);
+    const result = await consumerFor(id, source).drain();
+    return { ...state(), delivery: result.deliveries.find(d => d.operationId) ?? result.deliveries.at(-1) ?? null };
+  }
+  function command(id, action, body) {
+    requireRule(id);
+    const key = requestKey(body.requestId);
+    let decisionResult = null;
+    if (action === 'enable' || action === 'pause') engine[action](id, { requestId: `ui:${key}` });
+    else if (action === 'revoke' || action === 'retry_history') {
+      const stream = engine.getSourceState(id);
+      if (action === 'revoke' && !body.incidentId) engine.revoke(id, { requestId: `ui:${key}` });
+      else decisionResult = engine.decideSourceIssue(id, { incidentId: body.incidentId, decision: action }, {
+        requestId: `ui:${key}`, source: sourceFor(id),
+        // Privileged localhost DEMO bootstrap; never accepts an ownerId/context from JSON.
+        ownerContext: createTrustedDemoOwnerContext({ ruleIds: [id], principalId: 'DEMO:local-web-panel' }),
+      });
+    } else if (action === 'demo-interruption') {
+      const prior = engine.getSourceState(id).issue?.details?.requestId === key ||
+        engine.getSourceDecisionLog(id).some(entry => entry.issue.details?.origin === 'local-panel-demo' && entry.issue.details.requestId === key);
+      if (!prior) engine.reportSourceIssue(id, 'demo_stream_interruption', { origin: 'local-panel-demo', requestId: key });
+    } else throw new PanelError('UNSUPPORTED_ACTION', 'Это действие недоступно. Принятие пропуска не реализовано.', {}, 422);
+    return { ...state(), decisionResult };
+  }
+  return { state, create, price, command, close: () => engine.close() };
+}

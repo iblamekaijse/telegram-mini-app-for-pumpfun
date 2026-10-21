@@ -1,0 +1,4 @@
+.local-web/
+# Keep old run output locally; publish only the current test report and UI evidence.
+results/*.tap
+!results/web-tests.tap
