@@ -1,0 +1,14 @@
+{
+  "mode": "OFFLINE SAVED FIXTURE, EXPLICIT MUTATIONS",
+  "source": "DEX Screener token-pairs/v1/solana",
+  "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+  "checks": [
+    "mint_validation_pool_quote_and_source_visible",
+    "offline_outage_stale_no_signal_and_fresh_recovery",
+    "ui_create_enable_new_snapshot_virtual_result_reload",
+    "desktop_and_mobile_without_horizontal_overflow",
+    "offline_no_supported_pool_no_synthetic_substitution"
+  ],
+  "pageErrors": [],
+  "result": "passed"
+}

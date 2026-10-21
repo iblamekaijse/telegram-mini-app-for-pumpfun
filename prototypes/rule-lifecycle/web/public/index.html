@@ -16,30 +16,38 @@
     <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection-text">Подключаемся…</span><button class="icon-button" id="refresh" type="button" aria-label="Обновить состояние" title="Обновить состояние">↻</button></div>
   </div></header>
   <main class="shell">
-    <div class="intro"><div><p class="eyebrow">ЛОКАЛЬНАЯ ПАНЕЛЬ</p><h1>Торговое правило</h1><p class="subtitle">Задайте условие. Передайте цену. Проследите результат.</p></div><span class="environment"><span class="dot"></span>Только тестовые данные</span></div>
-    <div class="demo-notice"><strong>Средства не используются.</strong> Здесь нет кошельков и реальных сделок. Все цены, суммы и результаты — DEMO.</div>
+    <div class="intro"><div><p class="eyebrow">ЛОКАЛЬНАЯ ПАНЕЛЬ</p><h1>Торговое правило</h1><p class="subtitle">Выберите источник. Задайте условие. Проследите виртуальный результат.</p></div><span class="environment"><span class="dot"></span>Только виртуальные операции</span></div>
+    <div class="demo-notice"><strong>Средства не используются.</strong> Нет кошельков и реальных сделок. Доступны синтетический DEMO и реальные рыночные снимки с виртуальным срабатыванием.</div>
     <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+    <section class="card market-card" id="market-card" hidden aria-label="Рыночный источник">
+      <div class="card-heading"><div><p class="eyebrow">DEX SCREENER · PUMPSWAP · СНИМКИ</p><h2>Рыночные данные</h2></div><span id="market-status" class="state-pill">Ожидаем mint</span></div>
+      <div id="market-info" class="market-info"></div><p id="market-error" class="market-error" role="status"></p>
+      <div class="market-observation"><strong id="market-price">—</strong><span id="market-times" class="help"></span></div>
+      <p class="help">Цена условия — USD за 1 токен, поле priceUsd агрегатора. Пара пула — токен/WSOL. Это не поток сделок: между опросами могут быть пропущены движения. Источник не сообщает время конкретной цены; время ниже относится к локальному запросу. Bonding curve Pump.fun не поддерживается.</p>
+    </section>
     <div class="workspace">
       <section class="main-column" aria-label="Управление правилом">
         <section class="card" id="create-card">
           <div class="card-heading"><div><p class="eyebrow">ШАГ 1</p><h2>Создайте правило</h2></div><span class="soft-tag">Разовая покупка</span></div>
           <p class="muted form-intro">Тестовые значения можно менять. Создание не включает правило.</p>
           <form id="create-form" novalidate>
-            <label for="asset">Тестовый актив</label>
-            <select id="asset" name="assetId"><option value="DEMO:ASSET-A">DEMO:ASSET-A · актив A</option><option value="DEMO:ASSET-B">DEMO:ASSET-B · актив B</option></select><small class="field-error" data-error="assetId" id="asset-error"></small>
+            <label for="data-mode">Источник правила</label><select id="data-mode" name="mode"><option value="demo">Синтетический DEMO</option><option value="market-paper">Рыночные снимки · виртуально</option></select>
+            <div id="synthetic-fields"><label for="asset">Тестовый актив</label>
+            <select id="asset" name="assetId"><option value="DEMO:ASSET-A">DEMO:ASSET-A · актив A</option><option value="DEMO:ASSET-B">DEMO:ASSET-B · актив B</option></select><small class="field-error" data-error="assetId" id="asset-error"></small></div>
+            <div id="market-fields" hidden><label for="mint">Mint-адрес Solana</label><input id="mint" name="mint" spellcheck="false" autocomplete="off" placeholder="Mint, а не название токена" aria-describedby="mint-error"><small class="field-error" data-error="mint" id="mint-error"></small><button id="find-token" class="button secondary" type="button">Загрузить токен</button><p class="help">Выбор: индексируемый пул PumpSwap токен/WSOL с наибольшей заявленной USD-ликвидностью. Затем пул закрепляется, автоматической подмены нет.</p></div>
             <div class="field-grid">
               <div><label for="threshold">Цена не выше</label><div class="input-unit"><input id="threshold" name="threshold" inputmode="decimal" value="1.00" aria-describedby="threshold-help threshold-error" required><span>DEMO:QUOTE-A</span></div><small id="threshold-help" class="help">За 1 условную единицу актива</small><small class="field-error" data-error="threshold" id="threshold-error"></small></div>
               <div><label for="amount">Сумма покупки</label><div class="input-unit"><input id="amount" name="amount" inputmode="decimal" value="10.00" aria-describedby="amount-error" required><span>DEMO:QUOTE-A</span></div><small class="help">Условная валюта, не SOL и не USD</small><small class="field-error" data-error="amount" id="amount-error"></small></div>
             </div>
             <label for="expiry">Срок действия</label><div class="input-unit expiry-input"><input type="number" id="expiry" name="expiresInMinutes" min="1" max="1440" step="1" value="10" aria-describedby="expiry-error" required><span>минут</span></div><small class="field-error" data-error="expiresInMinutes" id="expiry-error"></small>
-            <p class="help limits-note">Ограничения имитации: комиссия до 0,01 DEMO:QUOTE-A; получение не меньше 1 условной единицы актива. Это не рыночная котировка.</p>
+            <p class="help limits-note" id="form-limits">Ограничения имитации: комиссия до 0,01 DEMO:QUOTE-A; получение не меньше 1 условной единицы актива. Это не рыночная котировка.</p>
             <div class="form-actions"><button class="button primary" type="submit">Создать правило <span aria-hidden="true">→</span></button><button class="button secondary" type="button" id="cancel-create" hidden>Назад к правилу</button></div>
           </form>
         </section>
         <section class="card rule-card" id="rule-card" hidden aria-label="Текущее правило"></section>
         <section class="card price-card" aria-label="Последняя цена"><div><p class="eyebrow">ПОСЛЕДНЯЯ ЦЕНА</p><div id="last-price" class="price-value">—</div><p id="price-unit" class="help">DEMO:QUOTE-A за 1 ед. актива</p></div><div id="price-time" class="price-time">Ожидаем первое<br>тестовое событие</div></section>
       </section>
-      <aside class="card demo-console" aria-labelledby="demo-title">
+      <aside class="card demo-console" id="demo-console" aria-labelledby="demo-title">
         <div class="card-heading"><div><p class="eyebrow">ШАГ 2 · ТЕСТОВЫЙ ИСТОЧНИК</p><h2 id="demo-title">DEMO-пульт</h2></div><span class="console-symbol" aria-hidden="true">⌁</span></div>
         <p class="muted">Отправьте цену в ядро. Условие и возможность исполнения проверит правило.</p>
         <form id="price-form" novalidate>
