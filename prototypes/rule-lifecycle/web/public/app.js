@@ -9,7 +9,8 @@ const dispositions = { prepared: 'Условие выполнено — опер
   condition_not_met: 'Условие цены пока не выполнено', ignored_stale: 'Событие устарело и не использовано', ignored_future: 'Время события из будущего — исполнение запрещено',
   ignored_asset: 'Событие другого актива пропущено', ignored_incompatible_price: 'Размерность цены не совпадает с правилом', ignored_out_of_order: 'Более старая цена пропущена',
   ignored_history_recovery: 'История проверена; накопленный сигнал не исполняется', ignored_before_resolution: 'Цена возникла до решения владельца — сигнал пропущен' };
-let model, signature = '', busy = false, connected = false, creating = false, revision = 0;
+let model, signature = '', statusSignature = '', busy = false, connected = false, creating = false, revision = 0;
+let feedbackRuleId = null;
 let revokeTarget;
 const pendingKeys = new Map();
 const current = () => model?.rules.find(rule => rule.config.id === model.currentRuleId);
@@ -21,10 +22,32 @@ const formatFor = (rule, units) => {
 };
 const quoteFor = rule => isMarket(rule) ? 'USD' : quote;
 const terminal = rule => ['finished', 'expired', 'revoked'].includes(rule.state);
-const pill = status => `<span class="state-pill ${escape(status)}">${escape(labels[status] ?? status)}</span>`;
+const operationLabel = (rule, operation) => isMarket(rule) && operation.status === 'succeeded' ? 'Виртуальное условие выполнено' : labels[operation.status];
+const pill = (status, label = labels[status] ?? status) => `<span class="state-pill ${escape(status)}">${escape(label)}</span>`;
 const date = value => new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const time = value => new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-function feedback(text, kind = '') { $('feedback').textContent = text; $('feedback').className = `feedback ${kind}`; $('feedback').hidden = !text; }
+function feedback(text, kind = '') { feedbackRuleId = null; $('feedback').textContent = text; $('feedback').className = `feedback ${kind}`; $('feedback').hidden = !text; }
+function renderMarketRuleStatus() {
+  const rule = current();
+  if (!isMarket(rule) || creating) {
+    if (feedbackRuleId !== null) feedback('');
+    return false;
+  }
+  const operation = rule.operations.at(-1);
+  const result = operation?.status === 'succeeded' ? 'Виртуальное условие выполнено. Условие подтверждено на полученной цене; покупка не проводилась.'
+    : operation?.status === 'unknown' ? 'Исход виртуальной операции неизвестен. Повторная попытка заблокирована.'
+    : operation?.status === 'failed' ? 'Виртуальное срабатывание завершилось неудачей. Повторной попытки не будет.'
+    : operation?.status === 'submitted' ? 'Ожидаем результат виртуальной операции.'
+    : operation?.status === 'prepared' ? 'Условие выполнено; виртуальная операция подготовлена.' : '';
+  const state = rule.state === 'revoked' ? 'Правило окончательно отозвано.'
+    : rule.state === 'expired' ? 'Срок правила истёк.'
+    : rule.state === 'paused' ? 'Новые операции приостановлены.'
+    : rule.state === 'draft' ? 'Правило создано, но ещё не включено.'
+    : rule.state === 'active' && !result ? 'Правило включено. Ожидаем следующий новый рыночный снимок; срабатывание будет виртуальным.' : '';
+  feedback([state, result].filter(Boolean).join(' '), ['unknown', 'failed'].includes(operation?.status) ? 'warning' : '');
+  feedbackRuleId = rule.config.id;
+  return true;
+}
 function updateControls() {
   const rule = current();
   document.body.classList.toggle('busy', busy);
@@ -108,7 +131,7 @@ function renderRule(rule) {
     <div class="rule-grid"><div><p class="label">Цена не выше</p><p class="value">${money(config.condition.thresholdUnits)}<small>${quote} за 1 ед. актива</small></p></div>
     <div><p class="label">${marketRule ? 'Виртуальная сумма' : 'Сумма покупки'}</p><p class="value">${money(config.amountUnits)}<small>${quote}</small></p></div>
     <div><p class="label">Действует до</p><p class="value">${date(config.expiresAtMs)}<small>По местному времени браузера</small></p></div>
-    <div><p class="label">Результат операции</p><p class="value">${last ? escape(labels[last.status]) : 'Ещё нет операции'}<small>${last ? 'Отдельно от состояния правила' : 'Покупка пока не передавалась имитатору'}</small></p></div></div>
+    <div><p class="label">Результат операции</p><p class="value" id="operation-result">${last ? escape(operationLabel(rule, last)) : 'Ещё нет операции'}<small>${marketRule ? last?.status === 'succeeded' ? 'Только проверка условия на полученной цене; покупка не проводилась' : 'Отдельно от состояния правила; реальные сделки не выполняются' : last ? 'Отдельно от состояния правила' : 'Покупка пока не передавалась имитатору'}</small></p></div></div>
     ${notice}<div class="rule-actions">${buttons}</div>${marketRule ? `<p class="help">Источник закреплён: DEX Screener, PumpSwap, пул <code>${escape(config.market.pairAddress)}</code>. Виртуальная сумма — параметр правила; цена исполнения неизвестна. Нет расчёта исполнения, получения токенов или доходности. Возраст локального наблюдения ≤ 45 с, возраст цены агрегатора неизвестен.</p>` : `<details class="rule-detail"><summary>Ограничения имитации</summary><p>Общий расход ≤ ${money(config.limits.maxTotalSpendUnits)} ${quote}; комиссия ≤ ${money(config.limits.maxFeeUnits)} ${quote}; получение ≥ ${config.limits.minReceiveUnits} услов. ед. актива. Возраст события ≤ ${config.limits.maxEventAgeMs / 1000} с. Проверки локальные, не блокчейн.</p></details>`}`;
   const lastEvent = rule.events.filter(entry => entry.sourceRecord).at(-1);
   const observed = marketRule ? rule.events.filter(e => e.marketSnapshot).at(-1)?.marketSnapshot : null;
@@ -132,7 +155,7 @@ function renderJournal() {
       if (op.result?.receipt) description += ` · расход ${money(op.result.receipt.spentUnits)} ${quote}, получение ${op.result.receipt.receivedUnits} услов. ед.`;
       if (op.status === 'unknown') description += ' · повтор запрещён';
       rows.push({ at: op.updatedAtMs, rank: 2, icon: op.status === 'succeeded' ? '✓' : op.status === 'unknown' ? '?' : '→',
-        title: op.status === 'succeeded' ? marketRule ? 'Виртуальное условие выполнено' : 'Покупка имитирована' : `Операция: ${labels[op.status]}`, description: description + (marketRule ? ' · покупка не проводилась, цена исполнения неизвестна' : ''), status: op.status });
+        title: op.status === 'succeeded' ? marketRule ? 'Виртуальное условие выполнено' : 'Покупка имитирована' : `Операция: ${labels[op.status]}`, description: description + (marketRule ? ' · покупка не проводилась, цена исполнения неизвестна' : ''), status: op.status, statusLabel: operationLabel(rule, op) });
     }
     for (const entry of rule.decisions) rows.push({ at: entry.decidedAtMs, rank: 3, icon: '↻', title: entry.outcome === 'history_verified' ? 'История проверена владельцем DEMO'
       : entry.outcome === 'rule_revoked' ? 'Правило окончательно отозвано' : 'Решение по потоку сохранено',
@@ -140,7 +163,7 @@ function renderJournal() {
   }
   rows.sort((a, b) => b.at - a.at || b.rank - a.rank);
   $('journal-count').textContent = `Всего: ${rows.length}`;
-  if (rows.length) $('journal-list').innerHTML = rows.slice(0, 40).map(row => `<div class="log-row"><span class="log-icon" aria-hidden="true">${escape(row.icon)}</span><div><p class="log-title">${escape(row.title)}</p><p class="log-description">${escape(row.description)}</p>${row.status ? `<div class="log-meta">${pill(row.status)}</div>` : ''}</div><time class="log-time">${time(row.at)}<br>${date(row.at).split(',')[0]}</time></div>`).join('');
+  if (rows.length) $('journal-list').innerHTML = rows.slice(0, 40).map(row => `<div class="log-row"><span class="log-icon" aria-hidden="true">${escape(row.icon)}</span><div><p class="log-title">${escape(row.title)}</p><p class="log-description">${escape(row.description)}</p>${row.status ? `<div class="log-meta">${pill(row.status, row.statusLabel)}</div>` : ''}</div><time class="log-time">${time(row.at)}<br>${date(row.at).split(',')[0]}</time></div>`).join('');
   const archived = model.rules.filter(rule => rule.config.id !== model.currentRuleId);
   $('archive').hidden = !archived.length;
   $('archive-list').innerHTML = archived.map(rule => `<div class="archive-row"><span>${escape(rule.config.assetId)} · ${date(rule.createdAtMs)}</span>${pill(rule.state)}</div>`).join('');
@@ -156,6 +179,9 @@ function render(data, force = false) {
     $('cancel-create').hidden = !rule;
     renderRule(rule); renderJournal(); formMode(); renderMarket();
   }
+  const rule = current();
+  const nextStatus = JSON.stringify([data.currentRuleId, rule?.state, rule?.operations.map(operation => [operation.id, operation.status]), creating]);
+  if (nextStatus !== statusSignature) { statusSignature = nextStatus; renderMarketRuleStatus(); }
   updateControls();
 }
 async function load() {
@@ -167,7 +193,7 @@ async function load() {
     if (!busy && version === revision) {
       const restored = !connected && !!model;
       render(data);
-      if (restored) feedback('Соединение восстановлено. Показано сохранённое состояние.');
+      if (restored && !renderMarketRuleStatus()) feedback('Соединение восстановлено. Показано сохранённое состояние.');
     }
   } catch (error) {
     if (version === revision) { connected = false; updateControls(); feedback(error.message === 'Failed to fetch' ? 'Сервер недоступен. Показаны последние полученные данные; действия остановлены.' : error.message, 'error'); }
@@ -200,7 +226,8 @@ async function mutate(path, body, { form = null, message = '' } = {}) {
       else if (unknown) feedback('История потока проверена. Неизвестный исход операции сохраняется; повторное исполнение правила запрещено.', 'warning');
       else if (terminal(current())) feedback('История проверена, но правило уже закрыто. Включить его снова нельзя.', 'warning');
       else feedback('История проверена. Для продолжения явно включите правило и передайте новое свежее событие.');
-    } else feedback(path === '/api/market/select' && data.market.error ? 'Рыночные данные не загружены. Причина показана в карточке источника; синтетической подмены нет.' : path === '/api/market/select' && data.market.status === 'waiting' ? 'Mint выбран. Новый запрос запланирован с соблюдением интервала; ожидаем данные.' : message || 'Изменение сохранено.', data.market?.error && path === '/api/market/select' ? 'warning' : '');
+    } else if (path !== '/api/market/select' && renderMarketRuleStatus()) { /* Current persisted rule/operation state is the status message. */ }
+    else feedback(path === '/api/market/select' && data.market.error ? 'Рыночные данные не загружены. Причина показана в карточке источника; синтетической подмены нет.' : path === '/api/market/select' && data.market.status === 'waiting' ? 'Mint выбран. Новый запрос запланирован с соблюдением интервала; ожидаем данные.' : message || 'Изменение сохранено.', data.market?.error && path === '/api/market/select' ? 'warning' : '');
   } catch (error) {
     feedback(error.message === 'Failed to fetch' ? 'Связь прервалась. Исход запроса не подтверждён. Обновите состояние; повтор того же действия использует прежний ключ запроса.' : error.message, 'error');
   } finally { busy = false; updateControls(); }
@@ -217,7 +244,7 @@ $('rule-card').addEventListener('click', event => {
   if (action === 'new') { creating = true; render(model, true); clearErrors(); $('create-card').querySelector('h2').textContent = 'Новое правило'; $('data-mode').focus(); return; }
   if (action === 'revoke') { revokeTarget = { ruleId: rule.config.id, incidentId: rule.stream.continuity === 'decision_required' ? rule.stream.issue.id : undefined }; $('revoke-dialog').showModal(); return; }
   const incidentId = rule.stream.continuity === 'decision_required' ? rule.stream.issue.id : undefined;
-  mutate(`/api/rules/${rule.config.id}/${action}`, { incidentId }, { message: action === 'enable' ? isMarket(rule) ? 'Правило включено. Ожидаем следующий новый рыночный снимок; срабатывание будет виртуальным.' : 'Правило включено. Передайте тестовую цену через DEMO-пульт.'
+  mutate(`/api/rules/${rule.config.id}/${action}`, { incidentId }, { message: action === 'enable' ? 'Правило включено. Передайте тестовую цену через DEMO-пульт.'
     : action === 'pause' ? 'Новые операции приостановлены. Переданная операция не отменяется.' : 'История проверена. Для продолжения нужны явное включение и свежие данные; неизвестный исход остаётся заблокированным.' });
 });
 $('confirm-revoke').addEventListener('click', () => {

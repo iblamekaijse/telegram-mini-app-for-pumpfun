@@ -19,6 +19,17 @@ mint = json.loads((ROOT / 'fixtures/dexscreener-pumpswap.json').read_text())[0][
 checks = []
 
 
+def assert_virtual_result(page):
+    expect(page.locator('#feedback')).to_contain_text('Виртуальное условие выполнено')
+    expect(page.locator('#feedback')).not_to_contain_text('Правило включено')
+    expect(page.locator('#feedback')).not_to_contain_text('Ожидаем следующий')
+    expect(page.locator('#operation-result')).to_contain_text('Виртуальное условие выполнено')
+    expect(page.locator('#operation-result')).to_contain_text('покупка не проводилась')
+    expect(page.locator('#operation-result')).not_to_contain_text('Успех')
+    expect(page.locator('#journal-list .state-pill.succeeded')).to_have_text('Виртуальное условие выполнено')
+    expect(page.locator('#journal-list .log-title').filter(has_text='Виртуальное условие выполнено')).to_have_count(1)
+
+
 def start(data_dir):
     command = ['node', '--use-env-proxy', str(ROOT / 'web/server.mjs')] if args.live else [
         'node', str(ROOT / 'test-support/market-browser-server.mjs'), str(data_dir)]
@@ -63,7 +74,15 @@ with tempfile.TemporaryDirectory(prefix='paper-market-browser-') as temporary:
             page.locator('#threshold').fill('1.00' if args.live else '0.0001')
             page.locator('#amount').fill('10.00')
             page.get_by_role('button', name='Создать правило', exact=False).click()
+            expect(page.locator('#feedback')).to_contain_text('Правило создано, но ещё не включено')
             page.get_by_role('button', name='Включить правило', exact=False).click()
+            expect(page.locator('#feedback')).to_contain_text('Правило включено')
+            if not args.live:
+                page.get_by_role('button', name='Приостановить', exact=True).click()
+                expect(page.locator('#feedback')).to_contain_text('Новые операции приостановлены')
+                expect(page.locator('#feedback')).not_to_contain_text('Правило включено')
+                page.get_by_role('button', name='Включить правило', exact=False).click()
+                expect(page.locator('#feedback')).to_contain_text('Правило включено')
             expect(page.locator('#demo-console')).to_be_hidden()
             if not args.live:
                 control(process, advanceMs=10_000)
@@ -79,11 +98,14 @@ with tempfile.TemporaryDirectory(prefix='paper-market-browser-') as temporary:
             expect(page.locator('#journal-list')).to_contain_text('Виртуальное условие выполнено', timeout=25_000)
             expect(page.locator('#rule-card')).to_contain_text('Попытка завершена')
             expect(page.locator('#rule-card')).to_contain_text('цена исполнения')
+            assert_virtual_result(page)
+            checks.append('current_rule_banner_and_explicit_virtual_result_after_background_trigger')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             mode = 'live' if args.live else 'fixture'
             page.screenshot(path=str(RESULTS / f'market-{mode}-desktop.png'), full_page=True)
             page.reload()
-            expect(page.locator('#journal-list').get_by_text('Виртуальное условие выполнено', exact=True)).to_have_count(1)
+            assert_virtual_result(page)
+            checks.append('reload_derives_same_completed_banner_and_operation_result')
             checks.append('ui_create_enable_new_snapshot_virtual_result_reload')
             if args.live:
                 before = page.request.get(url + '/api/state').json()
@@ -91,11 +113,11 @@ with tempfile.TemporaryDirectory(prefix='paper-market-browser-') as temporary:
                 process.wait(timeout=5)
                 process, url = start(data_dir)
                 page.goto(url)
-                expect(page.locator('#journal-list').get_by_text('Виртуальное условие выполнено', exact=True)).to_have_count(1)
+                assert_virtual_result(page)
                 after = page.request.get(url + '/api/state').json()
                 assert before['rules'][0]['operations'] == after['rules'][0]['operations']
                 expect(page.locator('#market-status')).to_have_text('Снимок получен')
-                expect(page.locator('#journal-list').get_by_text('Виртуальное условие выполнено', exact=True)).to_have_count(1)
+                assert_virtual_result(page)
                 checks.append('live_server_SIGKILL_restart_same_virtual_operation_no_repeat')
             page.set_viewport_size({'width': 390, 'height': 844})
             if not page.evaluate('document.documentElement.scrollWidth <= innerWidth'):

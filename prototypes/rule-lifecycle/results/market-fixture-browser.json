@@ -5,6 +5,8 @@
   "checks": [
     "mint_validation_pool_quote_and_source_visible",
     "offline_outage_stale_no_signal_and_fresh_recovery",
+    "current_rule_banner_and_explicit_virtual_result_after_background_trigger",
+    "reload_derives_same_completed_banner_and_operation_result",
     "ui_create_enable_new_snapshot_virtual_result_reload",
     "desktop_and_mobile_without_horizontal_overflow",
     "offline_no_supported_pool_no_synthetic_substitution"
