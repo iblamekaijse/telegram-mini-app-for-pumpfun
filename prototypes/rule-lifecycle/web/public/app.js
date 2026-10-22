@@ -11,6 +11,7 @@ const dispositions = { prepared: 'Условие выполнено — опер
   ignored_history_recovery: 'История проверена; накопленный сигнал не исполняется', ignored_before_resolution: 'Цена возникла до решения владельца — сигнал пропущен' };
 let model, signature = '', statusSignature = '', busy = false, connected = false, creating = false, revision = 0;
 let feedbackRuleId = null;
+let marketFormError = null;
 let revokeTarget;
 const pendingKeys = new Map();
 const current = () => model?.rules.find(rule => rule.config.id === model.currentRuleId);
@@ -85,6 +86,8 @@ function renderMarket() {
   const statuses = { idle: 'Ожидаем mint', waiting: 'Ожидаем времени опроса', loading: 'Загрузка…', fresh: 'Снимок получен', stale: 'Наблюдение устарело', error: 'Ошибка · повторим опрос', no_data: 'Нет поддерживаемых данных' };
   $('market-status').textContent = statuses[s.status] ?? s.status;
   $('market-status').className = `state-pill ${s.status === 'fresh' ? 'active' : s.status === 'idle' ? '' : 'unknown'}`;
+  $('market-availability').textContent = s.snapshotUsable ? 'Имеющийся снимок пригоден для формы нового правила.'
+    : 'Пригодного снимка для нового правила пока нет. Дождитесь свежих данных выбранного mint и пула.';
   const b = s.binding;
   $('market-info').innerHTML = s.mint ? `<p><strong>${escape(s.token?.name || 'Токен')}${s.token?.symbol ? ` · ${escape(s.token.symbol)}` : ''}</strong></p><p>Mint: <code>${escape(s.mint)}</code></p>${b ? `<p>Источник: DEX Screener · площадка: PumpSwap (по данным индекса)</p><p>Пул: <code>${escape(b.pairAddress)}</code></p><p>Пара: <code>${escape(b.mint)}</code> / WSOL <code>${escape(b.quoteMint)}</code></p><p>Котировка условия: USD за токен (priceUsd), оценка агрегатора, не WSOL и не цена исполнения.</p>` : ''}` : '<p class="muted">Введите mint в форме и нажмите «Загрузить токен».</p>';
   const errors = { NO_SUPPORTED_POOL: 'Нет индексируемого пула PumpSwap токен/WSOL для этого mint или закреплённый пул больше не возвращается. Другие площадки, обратные пары и bonding curve не поддерживаются. Пул автоматически не заменяется.',
@@ -92,11 +95,28 @@ function renderMarket() {
   $('market-error').textContent = s.error ? (errors[s.error] ?? `Источник недоступен (${s.error}). Виртуальные сигналы не создаются из старой цены; ожидаем новый успешный опрос.`) :
     s.recoveries ? 'Опрос восстановлен. Пропущенные движения неизвестны; используется только новый снимок.' : '';
   $('market-price').textContent = s.snapshot ? `${s.snapshot.rawPriceUsd} USD / токен${s.stale ? ' · устарело' : ''}` : 'Цена пока недоступна';
-  $('market-times').textContent = `${s.snapshot ? `Получено ${date(s.snapshot.receivedAtMs)}, ${time(s.snapshot.receivedAtMs)}. Начало запроса ${time(s.snapshot.observedAtMs)}. Время цены у источника неизвестно. ` : ''}${s.mint ? `Следующий опрос не раньше ${time(s.nextPollAtMs)}; интервал от ${s.pollIntervalMs / 1000} с.` : ''}`;
+  const polling = s.pollStatus === 'loading' ? 'Выполняется очередной запрос.' : s.pollStatus === 'waiting'
+    ? `Ожидаем разрешённого времени следующего опроса: не раньше ${time(s.nextPollAtMs)}.` : 'Следующий опрос запланирован.';
+  $('market-times').textContent = `${s.snapshot ? `Получено ${date(s.snapshot.receivedAtMs)}, ${time(s.snapshot.receivedAtMs)}. Начало запроса ${time(s.snapshot.observedAtMs)}. Время цены у источника неизвестно. ` : ''}${s.mint ? `${polling} Интервал от ${s.pollIntervalMs / 1000} с.` : ''}`;
 }
 function clearErrors() {
+  marketFormError = null;
   document.querySelectorAll('[data-error]').forEach(el => { el.textContent = ''; });
   document.querySelectorAll('[aria-invalid]').forEach(el => el.removeAttribute('aria-invalid'));
+}
+function clearRecoveredMarketError() {
+  const s = model?.market;
+  if (!marketFormError || $('data-mode').value !== 'market-paper' || !s?.snapshotUsable ||
+      s.mint !== marketFormError.mint || $('mint').value.trim() !== marketFormError.mint) return;
+  const previous = marketFormError;
+  marketFormError = null;
+  document.querySelector('[data-error="mint"]').textContent = '';
+  $('mint').removeAttribute('aria-invalid');
+  // Do not erase other field errors or an unrelated command/network failure.
+  if (![...document.querySelectorAll('[data-error]')].some(el => el.textContent) &&
+      $('feedback').classList.contains('error') && $('feedback').textContent === previous.message) {
+    feedback('Свежий снимок доступен. Можно повторить создание правила с указанными параметрами.');
+  }
 }
 function showFields(fields) {
   for (const [name, message] of Object.entries(fields)) {
@@ -182,6 +202,7 @@ function render(data, force = false) {
   const rule = current();
   const nextStatus = JSON.stringify([data.currentRuleId, rule?.state, rule?.operations.map(operation => [operation.id, operation.status]), creating]);
   if (nextStatus !== statusSignature) { statusSignature = nextStatus; renderMarketRuleStatus(); }
+  clearRecoveredMarketError();
   updateControls();
 }
 async function load() {
@@ -209,6 +230,7 @@ async function mutate(path, body, { form = null, message = '' } = {}) {
     const data = await response.json();
     if (!response.ok) {
       showFields(data.fields ?? {});
+      if (path === '/api/rules' && data.fields?.mint) marketFormError = { mint: body.mint, message: data.message };
       throw new Error(data.message);
     }
     pendingKeys.delete(identity); if (path !== '/api/market/select') creating = false; render(data, true);
@@ -227,7 +249,7 @@ async function mutate(path, body, { form = null, message = '' } = {}) {
       else if (terminal(current())) feedback('История проверена, но правило уже закрыто. Включить его снова нельзя.', 'warning');
       else feedback('История проверена. Для продолжения явно включите правило и передайте новое свежее событие.');
     } else if (path !== '/api/market/select' && renderMarketRuleStatus()) { /* Current persisted rule/operation state is the status message. */ }
-    else feedback(path === '/api/market/select' && data.market.error ? 'Рыночные данные не загружены. Причина показана в карточке источника; синтетической подмены нет.' : path === '/api/market/select' && data.market.status === 'waiting' ? 'Mint выбран. Новый запрос запланирован с соблюдением интервала; ожидаем данные.' : message || 'Изменение сохранено.', data.market?.error && path === '/api/market/select' ? 'warning' : '');
+    else feedback(path === '/api/market/select' && data.market.error ? 'Рыночные данные не загружены. Причина показана в карточке источника; синтетической подмены нет.' : path === '/api/market/select' && data.market.snapshotUsable ? 'Снимок выбранного mint и пула пригоден. Ожидание следующего опроса не мешает созданию правила.' : path === '/api/market/select' && data.market.pollStatus === 'waiting' ? 'Mint выбран. Новый запрос запланирован с соблюдением интервала; ожидаем данные.' : message || 'Изменение сохранено.', data.market?.error && path === '/api/market/select' ? 'warning' : '');
   } catch (error) {
     feedback(error.message === 'Failed to fetch' ? 'Связь прервалась. Исход запроса не подтверждён. Обновите состояние; повтор того же действия использует прежний ключ запроса.' : error.message, 'error');
   } finally { busy = false; updateControls(); }
@@ -257,7 +279,8 @@ $('interrupt-stream').addEventListener('click', () => mutate(`/api/rules/${curre
 $('refresh').addEventListener('click', load);
 $('data-mode').addEventListener('change', () => { $('threshold').value = $('data-mode').value === 'market-paper' ? '' : '1.00'; clearErrors(); formMode(); renderMarket(); });
 $('find-token').addEventListener('click', () => {
-  $('market-card').hidden = false; $('market-status').textContent = 'Загрузка…';
+  $('market-card').hidden = false;
+  if (model?.market?.mint !== $('mint').value.trim() || !model.market.snapshotUsable) $('market-status').textContent = 'Загрузка…';
   mutate('/api/market/select', { mint: $('mint').value.trim() }, { message: 'Источник загружен. Укажите своё тестовое условие в USD, создайте и включите правило.' });
 });
 load(); setInterval(() => { if (!busy) load(); }, 2000);

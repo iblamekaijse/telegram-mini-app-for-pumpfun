@@ -92,7 +92,7 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     const selected = market.state();
     const binding = prior?.config.market ?? selected.binding;
     if (isMarket && (!mintValid(body.mint) || binding?.mint !== body.mint || !prior &&
-      (selected.status !== 'fresh' || selected.stale))) fields.mint = 'Сначала загрузите свежую цену этого mint и поддерживаемый пул.';
+      !selected.snapshotUsable)) fields.mint = 'Сначала загрузите свежую цену этого mint и поддерживаемый пул.';
     const minutes = Number(body.expiresInMinutes);
     if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 1440) fields.expiresInMinutes = 'Укажите целое число от 1 до 1440 минут.';
     const values = {};

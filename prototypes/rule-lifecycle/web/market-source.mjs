@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mintValid, decimalUnits, WSOL_MINT, MARKET_PRICE_BASIS } from '../market-contract.mjs';
+import { mintValid, decimalUnits, WSOL_MINT, MARKET_PRICE_BASIS, marketBindingValid, marketSnapshotValid } from '../market-contract.mjs';
 
 export const POLL_MS = 10_000;
 export const STALE_MS = 45_000; // Local observation age only; provider price age is unknown.
@@ -22,8 +22,12 @@ export class MarketSnapshots {
       recoveries: 0, recoveredAtMs: null, pollIntervalMs: POLL_MS, staleAfterMs: STALE_MS };
   }
   state() {
-    const s = structuredClone(this.#state);
-    s.stale = !!s.snapshot && this.#clock() - s.snapshot.observedAtMs > STALE_MS;
+    const s = structuredClone(this.#state), now = this.#clock();
+    s.stale = !!s.snapshot && now - s.snapshot.observedAtMs > STALE_MS;
+    s.snapshotUsable = !!(marketBindingValid(s.binding) && marketSnapshotValid(s.snapshot) &&
+      s.mint === s.binding.mint && ['mode', 'provider', 'chainId', 'dexId', 'mint', 'pairAddress', 'quoteMint', 'priceField'].every(k => s.snapshot[k] === s.binding[k]) &&
+      !s.error && !s.stale && s.snapshot.receivedAtMs <= now);
+    s.pollStatus = this.#busy ? 'loading' : !s.mint ? 'idle' : now < s.nextPollAtMs ? 'waiting' : 'due';
     if (s.status === 'fresh' && s.stale) s.status = 'stale';
     return s;
   }
@@ -31,9 +35,15 @@ export class MarketSnapshots {
   async select(mint) {
     if (!mintValid(mint)) throw new TypeError('INVALID_MINT');
     if (this.#busy) return { limited: true };
-    if (this.#state.mint !== mint) Object.assign(this.#state, { binding: null, token: null, snapshot: null, lastSuccessAtMs: null, error: null });
+    const changed = this.#state.mint !== mint;
+    if (changed) Object.assign(this.#state, { binding: null, token: null, snapshot: null, lastSuccessAtMs: null, error: null });
     this.#state.mint = mint;
-    if (this.#clock() < this.#state.nextPollAtMs) { this.#state.status = 'waiting'; return { scheduled: true }; }
+    if (this.#clock() < this.#state.nextPollAtMs) {
+      // A request cooldown is not a loss of the last observation's quality.
+      // Preserve fresh/stale/error/no_data for the same mint and pinned pool.
+      if (changed) this.#state.status = 'waiting';
+      return { scheduled: true }; // Never re-deliver a cached observation as a new signal.
+    }
     return this.poll();
   }
   async poll() {

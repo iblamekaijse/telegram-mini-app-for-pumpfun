@@ -76,3 +76,28 @@ npm start
 ## Дополнение: реальные цены, виртуальные правила
 
 В отдельной связанной ветке и PR добавлен режим рыночных снимков DEX Screener для индексируемых пулов PumpSwap токен/WSOL. Кошельки/торговое исполнение не подключаются. [Пошаговая инструкция и границы источника](prototypes/rule-lifecycle/web/MARKET_DATA.md). Команда запуска прежняя, Node.js 24.19.0; серверный запуск теперь учитывает штатные proxy-настройки среды.
+
+
+## Обновление существующей WSL-установки из detached HEAD
+
+Сначала остановите свой `npm start` через **Ctrl+C**. Команды ниже запускаются в Ubuntu/WSL из любого каталога внутри существующего checkout. Node.js остаётся **24.19.0**, npm install не нужен.
+
+`git status --short` позволяет увидеть собственные правки исходников. Сохраните их перед обновлением; команды не используют reset/clean или принудительное переключение. При конфликте переключения они остановятся, сохранив файлы. Текущий detached commit получает резервную ветку. Новый checkout создаётся в отдельной локальной ветке от полученной версии PR №2. Настройки скачивания дополнены, чтобы работала и ранее созданная single-branch копия.
+
+```bash
+(
+  set -e
+  cd "$(git rev-parse --show-toplevel)"
+  git status --short
+  PANEL_UPDATE_STAMP=$(date +%Y%m%d-%H%M%S)
+  git branch "backup/panel-before-$PANEL_UPDATE_STAMP" HEAD
+  git remote set-branches --add origin codex/pumpswap-price-snapshots
+  git fetch origin
+  git switch --create "local/panel-update-$PANEL_UPDATE_STAMP" --track origin/codex/pumpswap-price-snapshots
+  git rev-parse HEAD
+  cd prototypes/rule-lifecycle
+  npm start
+)
+```
+
+Сравните выведенный полный hash с итоговым сообщением о передаче. `.local-web` остаётся в прежнем каталоге; она игнорируется Git, не удаляется и не пересоздаётся этой процедурой. Если использовался собственный DEMO_DATA_DIR, сохраните прежнюю настройку окружения. После запуска обновите браузер на том же Windows-компьютере: **http://localhost:4173**. Это не внешний Cloud-адрес. Сам запуск этих команд на компьютере пользователя здесь не проверялся.
