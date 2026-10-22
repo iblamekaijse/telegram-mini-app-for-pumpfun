@@ -1,0 +1,57 @@
+{
+  "before": {
+    "baselineCommit": "476369daa095d667c3ac9dd842762e6ac64060fb",
+    "mode": "OFFLINE saved public response, actual service and source class",
+    "first": {
+      "status": "fresh",
+      "stale": false,
+      "snapshotId": "observation-7a0fff2e-1303-4047-aeeb-46ed3d4fa9fc",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "nextPollAtMs": 110000,
+      "httpRequests": 1
+    },
+    "repeated": {
+      "status": "waiting",
+      "stale": false,
+      "snapshotId": "observation-7a0fff2e-1303-4047-aeeb-46ed3d4fa9fc",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "nextPollAtMs": 110000,
+      "httpRequests": 1
+    },
+    "create": {
+      "created": false,
+      "error": "INVALID_FIELDS",
+      "fields": {
+        "mint": "Сначала загрузите свежую цену этого mint и поддерживаемый пул."
+      }
+    }
+  },
+  "after": {
+    "mode": "OFFLINE saved public response, actual service and source class",
+    "first": {
+      "status": "fresh",
+      "stale": false,
+      "snapshotUsable": true,
+      "pollStatus": "waiting",
+      "snapshotId": "observation-a4e3ba9f-9992-4b80-a9ec-f7254e87ee14",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "nextPollAtMs": 110000,
+      "httpRequests": 1
+    },
+    "repeated": {
+      "status": "fresh",
+      "stale": false,
+      "snapshotUsable": true,
+      "pollStatus": "waiting",
+      "snapshotId": "observation-a4e3ba9f-9992-4b80-a9ec-f7254e87ee14",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "nextPollAtMs": 110000,
+      "httpRequests": 1
+    },
+    "create": {
+      "created": true,
+      "rules": 1,
+      "state": "draft"
+    }
+  }
+}

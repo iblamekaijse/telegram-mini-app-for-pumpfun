@@ -1,6 +1,6 @@
 # Передача локального DEMO
 
-Ветка: **`codex/local-demo-panel-handoff`**, база — `origin/main` / `8148f4f226ad5f5eb704a5b3d16fc3d400d98872`. В main ничего не сливается. До этой передачи новые исходники находились только в рабочей Cloud-среде и не были добавлены в Git. Поэтому GitHub main содержал только первоначальный README.
+Текущая ветка рыночной интеграции: **`codex/pumpswap-price-snapshots`**, база — `origin/main` / `12801554c90f3f07e699b828729d36900a220972`. Первоначальная поставка ядра/панели была сохранена коммитом `454fa48` в PR №1; GitHub показывает его слитым. Новые изменения передаются отдельным связанным PR, без самостоятельного слияния в main. До первоначальной поставки исходники находились только в рабочей Cloud-среде и не были добавлены в Git.
 
 ## Что сохранено в ветке
 
@@ -49,7 +49,7 @@ bash /tmp/demo-nvm-install.sh
 nvm install 24.19.0
 nvm alias default 24.19.0
 cd ~
-git clone --branch codex/local-demo-panel-handoff --single-branch https://github.com/iblamekaijse/telegram-mini-app-for-pumpfun.git
+git clone --branch codex/pumpswap-price-snapshots --single-branch https://github.com/iblamekaijse/telegram-mini-app-for-pumpfun.git
 cd telegram-mini-app-for-pumpfun
 git rev-parse HEAD
 node --version
@@ -70,4 +70,34 @@ npm start
 
 ## Границы
 
-Только синтетический DEMO, `LIVE_TRADING_ALLOWED=false`. Тестовый доверенный контекст владельца не является авторизацией. Нет кошельков, реальных сделок и проверки интеграции с Solana. `unknown` остаётся блокировкой, `accept_gap` отключён. Публикация исходников и снимков не означает публичного размещения приложения.
+Синтетический DEMO и рыночные снимки с виртуальным срабатыванием, `LIVE_TRADING_ALLOWED=false`. Тестовый доверенный контекст владельца не является авторизацией. Нет кошельков, реальных сделок и проверки интеграции с Solana. `unknown` остаётся блокировкой, `accept_gap` отключён. Публикация исходников и снимков не означает публичного размещения приложения.
+
+
+## Дополнение: реальные цены, виртуальные правила
+
+В отдельной связанной ветке и PR добавлен режим рыночных снимков DEX Screener для индексируемых пулов PumpSwap токен/WSOL. Кошельки/торговое исполнение не подключаются. [Пошаговая инструкция и границы источника](prototypes/rule-lifecycle/web/MARKET_DATA.md). Команда запуска прежняя, Node.js 24.19.0; серверный запуск теперь учитывает штатные proxy-настройки среды.
+
+
+## Обновление существующей WSL-установки из detached HEAD
+
+Сначала остановите свой `npm start` через **Ctrl+C**. Команды ниже запускаются в Ubuntu/WSL из любого каталога внутри существующего checkout. Node.js остаётся **24.19.0**, npm install не нужен.
+
+`git status --short` позволяет увидеть собственные правки исходников. Сохраните их перед обновлением; команды не используют reset/clean или принудительное переключение. При конфликте переключения они остановятся, сохранив файлы. Текущий detached commit получает резервную ветку. Новый checkout создаётся в отдельной локальной ветке от полученной версии PR №2. Настройки скачивания дополнены, чтобы работала и ранее созданная single-branch копия.
+
+```bash
+(
+  set -e
+  cd "$(git rev-parse --show-toplevel)"
+  git status --short
+  PANEL_UPDATE_STAMP=$(date +%Y%m%d-%H%M%S)
+  git branch "backup/panel-before-$PANEL_UPDATE_STAMP" HEAD
+  git remote set-branches --add origin codex/pumpswap-price-snapshots
+  git fetch origin
+  git switch --create "local/panel-update-$PANEL_UPDATE_STAMP" --track origin/codex/pumpswap-price-snapshots
+  git rev-parse HEAD
+  cd prototypes/rule-lifecycle
+  npm start
+)
+```
+
+Сравните выведенный полный hash с итоговым сообщением о передаче. `.local-web` остаётся в прежнем каталоге; она игнорируется Git, не удаляется и не пересоздаётся этой процедурой. Если использовался собственный DEMO_DATA_DIR, сохраните прежнюю настройку окружения. После запуска обновите браузер на том же Windows-компьютере: **http://localhost:4173**. Это не внешний Cloud-адрес. Сам запуск этих команд на компьютере пользователя здесь не проверялся.

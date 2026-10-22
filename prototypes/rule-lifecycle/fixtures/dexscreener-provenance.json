@@ -1,0 +1,7 @@
+{
+  "source": "https://api.dexscreener.com/token-pairs/v1/solana/HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+  "fetchedAtUtc": "2026-10-21T07:01:36.774050+00:00",
+  "originalResponseSha256": "da7e72d616a623ea38fbfb38194ddd85240c503745a6c4794927b9b4c26a18b9",
+  "fixtureSha256": "a2d6f19d0aa9704e7080acf70bee7c19b9ffd76c634735b45e467951a5417602",
+  "transformation": "Only public pair/token/price/liquidity fields retained; no holder data, social links or metadata images. Offline tests may explicitly mutate fixture copies."
+}

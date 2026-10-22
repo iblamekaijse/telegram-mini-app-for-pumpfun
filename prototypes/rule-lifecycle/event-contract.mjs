@@ -2,7 +2,7 @@ export const PRICE_UNIT = 'quote-atomic-per-whole-base';
 const integer = (v, min = 0) => Number.isSafeInteger(v) && v >= min;
 export const sourceIdValid = v => typeof v === 'string' && v.startsWith('DEMO:') && v.length > 5 && v.length <= 128 && v.trim() === v;
 export function priceBasisValid(basis) {
-  return basis?.unit === PRICE_UNIT && sourceIdValid(basis.quoteAssetId) && integer(basis.quoteDecimals) && basis.quoteDecimals <= 9;
+  return basis?.unit === PRICE_UNIT && (sourceIdValid(basis.quoteAssetId) || basis.quoteAssetId === 'FIAT:USD' && basis.quoteDecimals === 9) && integer(basis.quoteDecimals) && basis.quoteDecimals <= 9;
 }
 export function sourceEventValid(e) {
   return e?.version === 1 && sourceIdValid(e.sourceId) && typeof e.eventId === 'string' &&

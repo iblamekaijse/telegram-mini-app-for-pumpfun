@@ -19,8 +19,8 @@ const staticFiles = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
 ]);
-export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173 } = {}) {
-  const service = await createPanelService({ dataDir });
+export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173, marketFetch = fetch, clock = Date.now } = {}) {
+  const service = await createPanelService({ dataDir, marketFetch, clock });
   let mutations = Promise.resolve();
   const serial = fn => { const result = mutations.then(fn); mutations = result.catch(() => {}); return result; };
   const server = createServer(async (req, res) => {
@@ -50,6 +50,7 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
       catch { throw new PanelError('INVALID_JSON', 'Не удалось прочитать данные запроса.'); }
       const match = url.pathname.match(/^\/api\/rules\/([a-zA-Z0-9_-]+)\/([a-z_-]+)$/);
       const result = await serial(() => {
+        if (url.pathname === '/api/market/select') return service.selectMarket(body);
         if (url.pathname === '/api/rules') return service.create(body);
         if (!match) throw new PanelError('NOT_FOUND', 'Действие не найдено.', {}, 404);
         return match[2] === 'price' ? service.price(match[1], body) : service.command(match[1], match[2], body);
@@ -66,7 +67,18 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
   });
   try { await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolveListen); }); }
   catch (error) { service.close(); throw error; }
+  let polling = false, closing = false;
+  const timer = setInterval(() => {
+    if (polling || closing) return;
+    polling = true;
+    serial(() => service.pollMarket()).catch(error => {
+      // Storage errors stay fail-closed in RuleEngine; never replace history.
+      console.error(`Опрос остановлен: ${error.code ?? 'INTERNAL_ERROR'}`);
+    }).finally(() => { polling = false; });
+  }, 1000);
+  timer.unref();
   return { url: `http://127.0.0.1:${server.address().port}`, close: async () => {
+    closing = true; clearInterval(timer);
     await new Promise((done, fail) => server.close(error => error ? fail(error) : done()));
     await mutations; service.close();
   } };

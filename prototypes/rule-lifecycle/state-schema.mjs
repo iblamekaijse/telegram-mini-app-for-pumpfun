@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { canonical, priceBasisValid, sourceIdValid, sourceEventValid } from './event-contract.mjs';
+import { assetValid, marketBindingValid, marketSnapshotValid, MARKET_PRICE_BASIS } from './market-contract.mjs';
 
 export const emptySnapshot = () => ({ version: 3, nextOperation: 1, nextIncident: 1, sourceDecisions: [], rules: [], operations: [], commands: [], events: [], streams: [] });
 const integer = (v, min = 0) => Number.isSafeInteger(v) && v >= min;
 const id = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && v.trim() === v;
-const asset = v => id(v) && v.startsWith('DEMO:') && v.length > 5;
+const asset = v => id(v) && assetValid(v);
 const ruleStates = new Set(['draft', 'active', 'paused', 'finished', 'expired', 'revoked']);
 const operationStates = new Set(['prepared', 'submitted', 'succeeded', 'failed', 'unknown', 'cancelled']);
 const dispositions = new Set(['prepared', 'ignored_inactive', 'ignored_reserved', 'ignored_asset', 'ignored_future', 'ignored_stale', 'condition_not_met', 'ignored_incompatible_price', 'ignored_out_of_order', 'ignored_history_recovery', 'ignored_before_resolution']);
@@ -17,6 +18,7 @@ function pairs(value) {
   return map;
 }
 function event(e) {
+  if (e?.type === 'market-price-snapshot') { assert(marketSnapshotValid(e)); return; }
   assert(e && id(e.id) && e.type === 'synthetic-price' && asset(e.assetId) && integer(e.observedAtMs) && integer(e.priceUnits, 1));
   if (e.sourceEvent) {
     const { receivedAtMs, ...record } = e.sourceEvent;
@@ -48,6 +50,7 @@ export function validateSnapshot(state) {
   for (const [key, r] of rules) {
     const c = r.config, l = c?.limits;
     assert(id(key) && c?.id === key && asset(c.assetId) && ruleStates.has(r.state));
+    assert(c.assetId.startsWith('DEMO:') ? !c.market : marketBindingValid(c.market) && c.assetId === `SOLANA:${c.market.mint}` && canonical(c.condition?.priceBasis) === canonical(MARKET_PRICE_BASIS));
     assert(c.condition?.metric === 'priceUnits' && c.condition.operator === 'lte' && integer(c.condition.thresholdUnits, 1));
     if (c.condition.priceBasis !== undefined) assert(priceBasisValid(c.condition.priceBasis));
     assert(integer(c.amountUnits, 1) && integer(c.expiresAtMs) && integer(r.createdAtMs) && typeof r.reason === 'string');
@@ -76,11 +79,15 @@ export function validateSnapshot(state) {
     assert(rules.has(o.ruleId) && operationStates.has(o.status) && o.mode === 'demo');
     assert(integer(o.createdAtMs) && integer(o.updatedAtMs) && typeof o.reason === 'string');
     event(o.event);
+    if (rules.get(o.ruleId).config.market) {
+      const b = rules.get(o.ruleId).config.market;
+      assert(marketSnapshotValid(o.event) && ['provider', 'chainId', 'dexId', 'mint', 'pairAddress', 'quoteMint', 'priceField'].every(k => o.event[k] === b[k]));
+    } else assert.equal(o.event.type, 'synthetic-price');
     if (!['prepared', 'cancelled'].includes(o.status)) assert(integer(o.submittedAtMs));
     if (['succeeded', 'failed', 'unknown'].includes(o.status)) {
       assert(o.result?.mode === 'demo' && o.result.status === o.status);
     }
-    if (o.status === 'succeeded') {
+    if (o.status === 'succeeded' && !(rules.get(o.ruleId).config.market && o.result.kind === 'virtual-condition')) {
       const receipt = o.result.receipt;
       assert(receipt && ['spentUnits', 'receivedUnits', 'feeUnits', 'slippageBps'].every(key => integer(receipt[key])));
     }
@@ -104,7 +111,14 @@ export function validateSnapshot(state) {
     const ruleId = parts[0], eventId = parts.at(-1);
     assert(rules.has(ruleId));
     const source = JSON.parse(e.fingerprint);
-    if (parts.length === 2) { event(source); assert.equal(source.id, eventId); }
+    if (parts.length === 2) {
+      event(source); assert.equal(source.id, eventId);
+      if (source.type === 'market-price-snapshot') {
+        const b = rules.get(ruleId).config.market;
+        assert(b && ['provider', 'chainId', 'dexId', 'mint', 'pairAddress', 'quoteMint', 'priceField'].every(k => source[k] === b[k]));
+        assert.equal(canonical(e.marketSnapshot), canonical(source));
+      } else assert(!rules.get(ruleId).config.market);
+    }
     else {
       assert(sourceEventValid(source));
       assert(source.sourceId === parts[1] && source.eventId === eventId && e.ruleId === ruleId);
@@ -120,7 +134,7 @@ export function validateSnapshot(state) {
   }
   for (const [ruleId, s] of streams) {
     const rule = rules.get(ruleId);
-    assert(rule && priceBasisValid(rule.config.condition.priceBasis) && sourceIdValid(s.sourceId));
+    assert(rule && !rule.config.market && priceBasisValid(rule.config.condition.priceBasis) && sourceIdValid(s.sourceId));
     assert(integer(s.cursor) && ['continuous', 'decision_required', 'stopped'].includes(s.continuity));
     assert(s.freshAfterMs === null || integer(s.freshAfterMs));
     assert(s.lastOccurredAtMs === null || integer(s.lastOccurredAtMs));

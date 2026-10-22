@@ -1,0 +1,23 @@
+[
+  {
+    "chainId": "solana",
+    "dexId": "pumpswap",
+    "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+    "baseToken": {
+      "address": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+      "name": "Fartcoin",
+      "symbol": "Fartcoin"
+    },
+    "quoteToken": {
+      "address": "So11111111111111111111111111111111111111112",
+      "name": "Wrapped SOL",
+      "symbol": "SOL"
+    },
+    "priceUsd": "0.0001210",
+    "liquidity": {
+      "usd": 43613.44,
+      "base": 179151104,
+      "quote": 206.9136
+    }
+  }
+]

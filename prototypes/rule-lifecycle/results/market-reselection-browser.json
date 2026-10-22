@@ -1,0 +1,53 @@
+{
+  "mode": "OFFLINE SAVED RESPONSE, ACTUAL HTTP PANEL AND TEMPORARY SQLITE",
+  "checks": [
+    "background_recovery_clears_only_obsolete_source_form_error",
+    "finished_new_same_mint_repeated_selection_single_virtual_result_and_reload",
+    "pause_is_temporary_revocation_is_final_new_rule_keeps_old_history",
+    "expired_new_same_mint_rule_one_result_reload_preserves_all_six_rules"
+  ],
+  "repeatedSelectionHttpCallChecks": [
+    {
+      "before": 2,
+      "afterTwoSelections": 2
+    },
+    {
+      "before": 3,
+      "afterTwoSelections": 3
+    },
+    {
+      "before": 4,
+      "afterTwoSelections": 4
+    },
+    {
+      "before": 4,
+      "afterTwoSelections": 4
+    },
+    {
+      "before": 5,
+      "afterTwoSelections": 5
+    },
+    {
+      "before": 6,
+      "afterTwoSelections": 6
+    }
+  ],
+  "ruleStates": [
+    "finished",
+    "finished",
+    "revoked",
+    "finished",
+    "expired",
+    "finished"
+  ],
+  "operationCounts": [
+    1,
+    1,
+    0,
+    1,
+    0,
+    1
+  ],
+  "pageErrors": [],
+  "result": "passed"
+}
