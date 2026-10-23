@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-10-23T00:12:50.471Z",
+  "mode": "LIVE READ-ONLY DEX SCREENER; NO RULE OR POSITION CREATED",
+  "status": "fresh",
+  "error": null,
+  "snapshotUsable": true,
+  "binding": {
+    "mode": "market-paper",
+    "provider": "dexscreener",
+    "chainId": "solana",
+    "dexId": "pumpswap",
+    "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+    "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+    "quoteMint": "So11111111111111111111111111111111111111112",
+    "priceField": "priceUsd"
+  },
+  "rawPriceUsd": "0.00009105",
+  "providerUpdatedAtMs": null
+}

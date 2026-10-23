@@ -9,3 +9,5 @@
 .price-card>div:first-child{min-width:0}#price-unit{overflow-wrap:anywhere}.price-time{flex-shrink:0;max-width:46%}
 
 .workspace.market-mode{grid-template-columns:minmax(0,1fr)}
+
+#scenario{margin-bottom:16px}#position-fields{margin:18px 0}.position-card code,.position-record{overflow-wrap:anywhere}.position-card .value{overflow-wrap:anywhere}.position-card .help{margin-top:12px}.position-record{border-top:1px solid var(--line);padding:14px 0;font-size:12px}.position-record summary{cursor:pointer}.position-card .rule-grid{margin-top:20px}#position-history{margin-top:20px}

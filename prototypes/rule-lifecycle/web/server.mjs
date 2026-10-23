@@ -48,10 +48,12 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
       let body;
       try { body = JSON.parse(raw); if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error(); }
       catch { throw new PanelError('INVALID_JSON', 'Не удалось прочитать данные запроса.'); }
+      const positionMatch = url.pathname.match(/^\/api\/positions\/([a-zA-Z0-9_-]+)\/close$/);
       const match = url.pathname.match(/^\/api\/rules\/([a-zA-Z0-9_-]+)\/([a-z_-]+)$/);
       const result = await serial(() => {
         if (url.pathname === '/api/market/select') return service.selectMarket(body);
         if (url.pathname === '/api/rules') return service.create(body);
+        if (positionMatch) return service.closePosition(positionMatch[1], body);
         if (!match) throw new PanelError('NOT_FOUND', 'Действие не найдено.', {}, 404);
         return match[2] === 'price' ? service.price(match[1], body) : service.command(match[1], match[2], body);
       });

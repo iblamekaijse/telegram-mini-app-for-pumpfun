@@ -101,3 +101,30 @@ npm start
 ```
 
 Сравните выведенный полный hash с итоговым сообщением о передаче. `.local-web` остаётся в прежнем каталоге; она игнорируется Git, не удаляется и не пересоздаётся этой процедурой. Если использовался собственный DEMO_DATA_DIR, сохраните прежнюю настройку окружения. После запуска обновите браузер на том же Windows-компьютере: **http://localhost:4173**. Это не внешний Cloud-адрес. Сам запуск этих команд на компьютере пользователя здесь не проверялся.
+
+## Обновление до виртуальных позиций (отдельный PR с базой PR №2)
+
+Ветка этого этапа: **codex/virtual-position-lifecycle**, база **codex/pumpswap-price-snapshots**. Запуск остаётся `npm start`, Node.js **24.19.0**, без npm install. [Инструкция панели](prototypes/rule-lifecycle/web/VIRTUAL_POSITIONS.md).
+
+Сначала остановите сервер Ctrl+C. Команды из любого каталога существующего checkout в WSL, в том числе из detached HEAD. Сначала сохраните собственные незакоммиченные исходники, если `git status` их показывает. Создаются резервная ссылка на текущий commit и **копия стандартной .local-web вне репозитория** перед lossless-миграцией v3 → v4; история не удаляется. Если используется свой `DEMO_DATA_DIR`, скопируйте именно этот каталог при остановленном сервере и сохраните прежнюю настройку для запуска.
+
+```bash
+(
+  set -e
+  cd "$(git rev-parse --show-toplevel)"
+  git status --short
+  PANEL_UPDATE_STAMP=$(date +%Y%m%d-%H%M%S)
+  git branch "backup/panel-before-positions-$PANEL_UPDATE_STAMP" HEAD
+  if [ -d prototypes/rule-lifecycle/.local-web ]; then
+    cp -a prototypes/rule-lifecycle/.local-web "$HOME/panel-data-before-v4-$PANEL_UPDATE_STAMP"
+  fi
+  git remote set-branches --add origin codex/virtual-position-lifecycle
+  git fetch origin
+  git switch --create "local/positions-$PANEL_UPDATE_STAMP" --track origin/codex/virtual-position-lifecycle
+  git rev-parse HEAD
+  cd prototypes/rule-lifecycle
+  npm start
+)
+```
+
+Сравните hash с переданным коммитом. Перейдите **http://localhost:4173** на том же Windows-компьютере; адрес доступен только компьютеру с сервером. Не запускайте старый код на обновлённой v4-базе: прежняя версия её не поддерживает. Резервная копия нужна для отдельного отката вместе со старым кодом, а не для смешивания историй. Публикация PR не размещает приложение в интернете. Сам компьютер пользователя недоступен в этой среде; поведение миграции проверено в Linux на временных SQLite.

@@ -14,3 +14,5 @@ npm start
 [Передача результата, Windows и снимки работающей панели](HANDOFF.md) · [Фактические проверки](prototypes/rule-lifecycle/VALIDATION.md)
 
 [Рыночные данные: запуск, границы и проверка](prototypes/rule-lifecycle/web/MARKET_DATA.md) · [Инструкция и ограничения веб-панели](prototypes/rule-lifecycle/web/README.md) · [Демонстрационное ядро](prototypes/rule-lifecycle/README.md) · [Бриф проекта](PROJECT_BRIEF.md)
+
+[Виртуальная позиция: вход, наблюдение, TP/SL и ручное закрытие](prototypes/rule-lifecycle/web/VIRTUAL_POSITIONS.md) — отдельный явно выбираемый сценарий, без реальных сделок.

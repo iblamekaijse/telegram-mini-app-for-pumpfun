@@ -9,6 +9,8 @@ import { DEMO_PRICE_BASIS } from '../fixtures.mjs';
 import { MarketSnapshots, STALE_MS } from './market-source.mjs';
 import { mintValid, decimalUnits, MARKET_PRICE_BASIS } from '../market-contract.mjs';
 
+import { positionValues, formatRational } from '../position-model.mjs';
+
 export const ASSETS = ['DEMO:ASSET-A', 'DEMO:ASSET-B'];
 const outcomes = ['succeeded', 'failed', 'unknown'];
 export class PanelError extends Error {
@@ -47,7 +49,8 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
   engine = RuleEngine[initialize ? 'initialize' : 'open']({ storagePath: join(dataDir, 'state.sqlite'), clock, executor: new PanelSimulator() });
   const rules = () => engine.listRules();
   const current = () => rules().at(-1);
-  const market = new MarketSnapshots({ fetchImpl: marketFetch, clock, binding: current()?.config.market ?? null });
+  const openPosition = () => engine.listPositions().find(p => p.status !== 'closed');
+  const market = new MarketSnapshots({ fetchImpl: marketFetch, clock, binding: openPosition()?.binding ?? current()?.config.market ?? null });
   const history = id => engine.getEventLog(id).filter(e => e.sourceRecord).map(e => e.sourceRecord).sort((a, b) => a.position - b.position);
   const sourceFor = (id, records = history(id)) => new SyntheticSource({ sourceId: engine.getSourceState(id).sourceId, events: records });
   const consumerFor = (id, source = sourceFor(id)) => new SourceConsumer({ engine, ruleId: id, source });
@@ -77,7 +80,14 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     return engine.getRule(id);
   }
   function state() {
-    return { mode: 'demo', liveTradingAllowed: false, now: clock(), market: market.state(), currentRuleId: current()?.config.id ?? null,
+    const selected = market.state();
+    const positions = engine.listPositions().map(p => {
+      const currentValuation = selected.snapshotUsable && selected.snapshot?.id === p.last.id;
+      const values = p.exit?.values ?? positionValues(p.amountUnits, p.entry.priceUnits, p.last.priceUnits, p.policy);
+      return { ...p, valuationAvailable: p.status === 'closed' || currentValuation,
+        display: Object.fromEntries(Object.entries(values).map(([key, value]) => [key, formatRational(value, key === 'quantity' ? 12 : 9)])) };
+    });
+    return { mode: 'demo', liveTradingAllowed: false, now: clock(), market: selected, positions, currentRuleId: current()?.config.id ?? null,
       rules: rules().map(rule => ({ ...rule, stream: rule.config.market ? { kind: 'snapshots', continuity: 'not_asserted', connected: market.state().status === 'fresh' } : engine.getSourceState(rule.config.id),
         events: engine.getEventLog(rule.config.id), operations: rule.operationIds.map(id => engine.getOperation(id)),
         decisions: engine.getSourceDecisionLog(rule.config.id) })) };
@@ -87,6 +97,20 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     const id = `web-${key}`, prior = rules().find(rule => rule.config.id === id);
     const isMarket = body.mode === 'market-paper';
     const fields = {};
+    const positionScenario = body.scenario === 'virtual-position';
+    if (body.scenario !== undefined && !['condition-only', 'virtual-position'].includes(body.scenario)) fields.scenario = 'Выберите сценарий.';
+    if (positionScenario && !isMarket) fields.scenario = 'Виртуальная позиция доступна только на рыночных снимках.';
+    let position;
+    if (positionScenario) {
+      const policy = {};
+      for (const [field, max] of [['takeProfit', 1_000_000], ['stopLoss', 9999]]) {
+        try {
+          policy[field + 'Bps'] = money(body[field], field);
+          if (policy[field + 'Bps'] > max) throw new Error();
+        } catch { fields[field] = field === 'stopLoss' ? 'Процент больше 0 и меньше 100; до двух знаков после запятой.' : 'Процент больше 0 и не выше 10000; до двух знаков после запятой.'; }
+      }
+      position = { version: 1, ...policy };
+    }
     if (body.mode !== undefined && !['demo', 'market-paper'].includes(body.mode)) fields.mode = 'Выберите режим.';
     if (!isMarket && !ASSETS.includes(body.assetId)) fields.assetId = 'Выберите тестовый актив.';
     const selected = market.state();
@@ -106,8 +130,9 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     }
     if (Object.keys(fields).length) throw new PanelError('INVALID_FIELDS', 'Проверьте поля формы.', fields);
     const input = { assetId: isMarket ? `SOLANA:${body.mint}` : body.assetId, thresholdUnits: values.threshold, amountUnits: values.amount, expiresInMinutes: minutes,
-      ...(isMarket ? { mode: 'market-paper', market: binding } : {}) };
+      ...(isMarket ? { mode: 'market-paper', market: binding } : {}), ...(position ? { position } : {}) };
     if (prior && JSON.stringify(prior.config.panel.input) !== JSON.stringify(input)) throw new PanelError('IDEMPOTENCY_CONFLICT', 'Этот запрос уже использован с другими параметрами.', {}, 409);
+    if (!prior && openPosition()) throw new PanelError('POSITION_ALREADY_OPEN', 'Сначала закройте открытую виртуальную позицию. Источник и пул закреплены.', {}, 409);
     if (!prior && current() && !['finished', 'expired', 'revoked'].includes(current().state)) {
       throw new PanelError('RULE_ALREADY_OPEN', 'Сначала окончательно отзовите текущее правило. Его история сохранится.', {}, 409);
     }
@@ -118,7 +143,7 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
       limits: { maxTotalSpendUnits: input.amountUnits + (isMarket ? 0 : 1), minReceiveUnits: 1, maxFeeUnits: isMarket ? 0 : 1, maxSlippageBps: 50, maxEventAgeMs: isMarket ? STALE_MS : 30_000 },
       expiresAtMs: clock() + minutes * 60_000,
       panel: { version: 1, input },
-      ...(isMarket ? { market: binding } : {}),
+      ...(isMarket ? { market: binding } : {}), ...(position ? { position } : {}),
     };
     engine.createRule(config, { requestId: `create:${key}` });
     ensureBinding(engine.getRule(id));
@@ -163,7 +188,9 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     return { ...state(), decisionResult };
   }
   async function recordMarket(result) {
-    const rule = current(), snapshot = result.snapshot;
+    const rule = current(), snapshot = result.snapshot, position = openPosition();
+    // Only a NEW successful poll can enter this path; cached state is never re-emitted.
+    if (snapshot && position) engine.receivePositionSnapshot(position.id, snapshot);
     if (snapshot && rule?.config.market && !['finished', 'expired', 'revoked'].includes(rule.state) &&
       rule.config.market.mint === snapshot.mint && rule.config.market.pairAddress === snapshot.pairAddress) {
       const delivery = engine.receiveMarketSnapshot(rule.config.id, snapshot);
@@ -173,12 +200,14 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
   }
   async function selectMarket(body) {
     if (!mintValid(body.mint)) throw new PanelError('INVALID_FIELDS', 'Проверьте mint-адрес.', { mint: 'Нужен Solana-адрес: Base58, ровно 32 байта.' });
+    if (openPosition()) throw new PanelError('POSITION_ALREADY_OPEN', 'Источник и пул закреплены открытой позицией. Дождитесь её закрытия.', {}, 409);
     if (current() && !['finished', 'expired', 'revoked'].includes(current().state)) throw new PanelError('RULE_ALREADY_OPEN', 'Сначала завершите или окончательно отзовите текущее правило. Его источник закреплён.', {}, 409);
     const result = await market.select(body.mint);
     if (result.limited) throw new PanelError('MARKET_RATE_LIMIT', 'Следующий запрос будет доступен после показанного времени опроса.', {}, 429);
     return recordMarket(result);
   }
   return { state, create, price, command, selectMarket,
+    closePosition: (id, body) => { engine.requestPositionClose(id, { requestId: `close:${requestKey(body.requestId)}` }); return state(); },
     pollMarket: async () => current() && !current().config.market && !['finished', 'expired', 'revoked'].includes(current().state) ? state() : recordMarket(await market.poll()),
     close: () => engine.close() };
 }
