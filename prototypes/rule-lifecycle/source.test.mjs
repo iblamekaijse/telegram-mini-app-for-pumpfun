@@ -267,7 +267,7 @@ test('v1 SQLite history is upgraded without losing rules, command identity or an
   ] }).results[3];
   const db = new DatabaseSync(f.storagePath);
   const saved = JSON.parse(db.prepare('SELECT payload FROM snapshot').get().payload);
-  saved.version = 1; delete saved.streams; delete saved.nextIncident; delete saved.sourceDecisions;
+  saved.version = 1; delete saved.streams; delete saved.nextIncident; delete saved.sourceDecisions; delete saved.positions;
   const payload = JSON.stringify(saved), digest = createHash('sha256').update(payload).digest('hex');
   db.prepare('UPDATE snapshot SET payload=?, sha256=?').run(payload, digest); db.close();
   const reopened = run(f, { actions: [command('createRule', demoRule(), { requestId: 'legacy-create' }), rule(),
@@ -280,7 +280,7 @@ test('v1 SQLite history is upgraded without losing rules, command identity or an
   assert.equal(calls(f), 1);
   const inspected = new DatabaseSync(f.storagePath);
   const upgraded = JSON.parse(inspected.prepare('SELECT payload FROM snapshot').get().payload);
-  assert.equal(upgraded.version, 3); assert.deepEqual(upgraded.streams, []);
+  assert.equal(upgraded.version, 4); assert.deepEqual(upgraded.streams, []);
   inspected.close();
 });
 
