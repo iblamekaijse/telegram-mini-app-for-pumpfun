@@ -19,7 +19,11 @@ const transport = { async call(method, body, signal) {
   sent.push({ method, body }); return { message_id: sent.length };
 } };
 const app = await startPanel({ dataDir: process.argv[2], port: 0, clock: () => now, telegramTransport: transport, telegramToken: '',
-  marketFetch: async () => new Response(JSON.stringify([{ ...fixture[0], priceUsd }])) });
+  marketFetch: async url => {
+    const requestedMint = url.split('/').at(-1);
+    return new Response(JSON.stringify([{ ...fixture[0], priceUsd, baseToken: { ...fixture[0].baseToken, address: requestedMint },
+      ...(requestedMint !== fixture[0].baseToken.address ? { pairAddress: fixture[0].baseToken.address } : {}) }]));
+  } });
 console.log(JSON.stringify({ url: app.url, mode: 'OFFLINE TEST Telegram and market transports' }));
 createInterface({ input: process.stdin }).on('line', line => {
   const cmd = JSON.parse(line); now += cmd.advanceMs ?? 0; priceUsd = cmd.priceUsd ?? priceUsd;

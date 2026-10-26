@@ -12,8 +12,10 @@ const mint = fixture[0].baseToken.address;
 async function setup(t) {
   const root = mkdtempSync(join(tmpdir(), 'telegram-dialog-')), dataDir = join(root,'data');
   let now = 100000, priceUsd = '120', fail = false, calls = 0, id = 0, s;
-  const options = { dataDir, telegramConfigured: true, clock: () => now, marketFetch: async () => {
-    calls++; if (fail) throw new Error('TEST outage'); return new Response(JSON.stringify([{ ...fixture[0], priceUsd }]));
+  const options = { dataDir, telegramConfigured: true, clock: () => now, marketFetch: async url => {
+    calls++; if (fail) throw new Error('TEST outage'); const requestedMint = url.split('/').at(-1);
+    return new Response(JSON.stringify([{ ...fixture[0], priceUsd, baseToken: { ...fixture[0].baseToken, address: requestedMint },
+      ...(requestedMint !== mint ? { pairAddress: mint } : {}) }]));
   } };
   s = await createPanelService(options);
   t.after(() => { s.close(); rmSync(root,{recursive:true,force:true}); });
@@ -26,7 +28,7 @@ async function setup(t) {
     async source(){const job=s.telegram.dialog.beginSource(); if(job) await s.telegram.dialog.finishSource(job,await job.work.promise);},
     async poll(price){now+=10000; priceUsd=price;return s.pollMarket();}, advance(ms){now+=ms;}, fail(v){fail=v;},
     async reopen(){s.close();now++;s=await createPanelService(options);},
-    async review(){message('/new');message(mint);await this.source();click(this.callback('next'));for(const v of ['100','1000','10','10','10'])message(v);},
+    async review(selectedMint=mint){message('/new');message(selectedMint);await this.source();click(this.callback('next'));for(const v of ['100','1000','10','10','10'])message(v);},
   };
 }
 
@@ -146,4 +148,73 @@ test('a market request begun before enable cannot enter the rule after the netwo
     assert.equal(s.state().positions.length,0);assert.equal(s.state().rules[0].operations.length,0);
     now+=10000;slow=false;await s.pollMarket();assert.equal(s.state().positions.length,1);
   }finally{s.close();rmSync(root,{recursive:true,force:true});}
+});
+
+const alternateMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+async function waitingRule(c, state='active') {
+  await c.review();c.click(c.callback('confirm'));const id=c.s.state().currentRuleId;
+  if(state!=='draft')c.click(c.callback('enable'));
+  if(state==='paused')c.s.command(id,'pause',{requestId:'revoke-setup-pause'});
+  c.message('/status');return id;
+}
+for(const state of ['draft','active','paused'])test(`Telegram revoke ${state}: explicit concrete confirmation preserves history and allows another mint`,async t=>{
+  const c=await setup(t),id=await waitingRule(c,state);
+  c.click(c.callback('revoke'));assert.equal(c.s.state().rules[0].state,state);
+  assert.ok(c.text().includes(id));assert.match(c.text(),/Отзыв окончательный/);assert.match(c.text(),/временной остановки есть пауза/);
+  c.click(c.callback('revoke_confirm'));assert.equal(c.s.state().rules[0].state,'revoked');assert.match(c.text(),/Новое виртуальное правило/);
+  c.advance(10000);await c.review(alternateMint);c.click(c.callback('confirm'));
+  const s=c.s.state();assert.equal(s.rules.length,2);assert.equal(s.rules[0].config.id,id);assert.equal(s.rules[0].config.market.mint,mint);
+  assert.equal(s.rules[1].config.market.mint,alternateMint);assert.equal(s.rules[1].state,'draft');assert.equal(s.positions.length,0);
+});
+test('cancelling a revoke invalidates its confirmation and never cancels the separate conversation draft',async t=>{
+  const c=await setup(t);await waitingRule(c);c.message('/new');const draft=c.bot.load().dialog;
+  c.message('/status');c.click(c.callback('revoke'));const confirmation=c.callback('revoke_confirm');
+  c.click(c.callback('revoke_cancel'));assert.match(c.text(),/Отзыв правила .* отменён/);
+  c.click(confirmation);assert.equal(c.s.state().rules[0].state,'active');assert.deepEqual(c.bot.load().dialog,draft);
+  assert.match(c.text(),/отменено или устарело/);
+  c.message('/status');c.click(c.callback('revoke'));c.click(c.callback('revoke_confirm'));
+  assert.equal(c.s.state().rules[0].state,'revoked');assert.deepEqual(c.bot.load().dialog,draft);
+});
+test('duplicate updates, old request and old confirmation cannot revoke a new rule',async t=>{
+  const c=await setup(t);await waitingRule(c);const oldRequest=c.callback('revoke');c.click(oldRequest);
+  const oldConfirm=c.callback('revoke_confirm'),u=c.click(oldConfirm);c.bot.handle(u);c.click(oldConfirm);
+  assert.equal(c.bot.load().outbox.filter(e=>e.method==='sendMessage'&&/окончательно отозвано/.test(e.body.text)).length,1);
+  c.advance(10000);await c.review(alternateMint);c.click(c.callback('confirm'));const second=c.s.state().currentRuleId;
+  c.click(oldConfirm);c.click(oldRequest);assert.equal(c.s.state().rules[1].state,'draft');assert.equal(c.s.state().currentRuleId,second);
+});
+test('entry between revoke request and confirmation refuses revocation and offers independent position closing',async t=>{
+  const c=await setup(t);await waitingRule(c);c.click(c.callback('revoke'));const confirm=c.callback('revoke_confirm');
+  await c.poll('100');const before=c.s.state().positions[0];c.click(confirm);
+  assert.match(c.text(),/Вход уже произошёл/);assert.ok(c.text().includes(before.id));assert.match(c.text(),/отдельное действие «Запросить закрытие позиции»/);
+  assert.deepEqual(c.s.state().positions[0],before);assert.equal(c.s.state().rules[0].state,'finished');
+  assert.equal(c.bot.load().outbox.filter(e=>e.method==='sendMessage').at(-1).body.reply_markup.inline_keyboard.flat().some(b=>b.text==='Запросить закрытие позиции'),true);
+});
+test('expiry and panel replacement between request and confirmation cannot affect the replacement rule',async t=>{
+  const c=await setup(t);const first=await waitingRule(c);c.click(c.callback('revoke'));const confirmation=c.callback('revoke_confirm');
+  c.s.command(first,'revoke',{requestId:'panel-revoke-confirm-race'});
+  c.advance(10000);await c.review(alternateMint);c.click(c.callback('confirm'));c.click(confirmation);
+  assert.equal(c.s.state().rules[1].state,'draft');assert.equal(c.s.state().rules[0].state,'revoked');
+  c.message('/status');c.click(c.callback('revoke'));const expired=c.callback('revoke_confirm');c.advance(300000);c.click(expired);
+  assert.match(c.text(),/устарело/);assert.equal(c.s.state().rules[1].state,'draft');
+});
+test('foreign confirmation and old owner generation have no revoke authority',async t=>{
+  const c=await setup(t);await waitingRule(c);c.click(c.callback('revoke'));const confirm=c.callback('revoke_confirm');
+  c.click(confirm,99);assert.equal(c.s.state().rules[0].state,'active');
+  c.bot.unlink();c.message('/start '+c.bot.createCode().code);c.click(confirm);assert.equal(c.s.state().rules[0].state,'active');
+});
+test('revoke confirmation survives restart; crash after revoke commit replays without changing a second object',async t=>{
+  const c=await setup(t);await waitingRule(c);c.click(c.callback('revoke'));const confirm=c.callback('revoke_confirm');
+  await c.reopen();assert.equal(c.s.state().rules[0].state,'active');
+  const save=c.bot.save.bind(c.bot);c.bot.save=value=>{if(value.pending===null)throw new Error('TEST revoke crash');save(value);};
+  assert.throws(()=>c.click(confirm),/TEST revoke crash/);assert.equal(c.s.state().rules[0].state,'revoked');
+  await c.reopen();assert.equal(c.bot.load().pending,null);assert.equal(c.s.state().rules.length,1);assert.equal(c.s.state().rules[0].state,'revoked');
+  c.click(confirm);assert.equal(c.s.state().rules[0].state,'revoked');
+});
+test('unknown arising after a revoke request remains unknown and cannot be revoked through this pre-handoff action',async t=>{
+  const c=await setup(t);
+  const id=c.s.create({requestId:'unknown-revoke-0001',assetId:'DEMO:ASSET-A',threshold:'1',amount:'10',expiresInMinutes:10}).currentRuleId;
+  c.s.command(id,'enable',{requestId:'unknown-revoke-enable'});c.message('/status');c.click(c.callback('revoke'));const confirm=c.callback('revoke_confirm');
+  await c.s.price(id,{requestId:'unknown-revoke-price',price:'0.9',outcome:'unknown'});c.click(confirm);
+  assert.match(c.text(),/unknown/);assert.equal(c.s.state().rules[0].state,'paused');assert.equal(c.s.state().rules[0].operations[0].status,'unknown');
+  const keys=c.bot.load().outbox.filter(e=>e.method==='sendMessage').at(-1).body.reply_markup.inline_keyboard.flat();assert.equal(keys.some(b=>b.text==='Отозвать правило'),false);
 });

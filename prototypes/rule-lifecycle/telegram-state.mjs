@@ -11,7 +11,7 @@ export function validateTelegramState(t) {
   assert(t.pending === null || n(t.pending.update_id) && t.pending.update_id >= t.offset);
   assert(Array.isArray(t.callbacks) && new Set(t.callbacks.map(c => c.id)).size === t.callbacks.length);
   for (const c of t.callbacks) assert(/^[a-f0-9]{24}$/.test(c.id) && n(c.generation) &&
-    ['status', 'enable', 'pause', 'close', 'new', 'help', 'history', 'detail', 'continue', 'back', 'cancel', 'next', 'reload', 'confirm'].includes(c.action) && typeof c.target === 'string' && n(c.expiresAtMs) && (c.usedUpdateId === undefined || n(c.usedUpdateId)));
+    ['status', 'enable', 'pause', 'close', 'revoke', 'revoke_confirm', 'revoke_cancel', 'new', 'help', 'history', 'detail', 'continue', 'back', 'cancel', 'next', 'reload', 'confirm'].includes(c.action) && typeof c.target === 'string' && n(c.expiresAtMs) && (c.usedUpdateId === undefined || n(c.usedUpdateId)));
   assert(Array.isArray(t.seen) && t.seen.every(v => typeof v === 'string') && new Set(t.seen).size === t.seen.length);
   assert(t.market === null || typeof t.market.key === 'string' && typeof t.market.usable === 'boolean');
   assert(Array.isArray(t.outbox) && new Set(t.outbox.map(e => e.id)).size === t.outbox.length);

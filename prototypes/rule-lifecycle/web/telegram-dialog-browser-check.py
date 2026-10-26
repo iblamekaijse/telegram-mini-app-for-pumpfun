@@ -72,6 +72,36 @@ with tempfile.TemporaryDirectory(prefix='bot-dialog-browser-') as tmp:
             created,confirm=click(proc,review,'Подтвердить создание','Виртуальное правило создано')
             control(proc,callback=confirm)
             click(proc,created,'Включить правило','Ожидающее входное правило включено')
+            active=send(proc,'/status','Состояние входа: включено')
+            confirmation,_=click(proc,active,'Отозвать правило','Отзыв окончательный')
+            click(proc,confirmation,'Не отзывать правило','Отзыв правила')
+            assert page.request.get(url+'/api/state').json()['rules'][0]['state']=='active'
+            active=send(proc,'/status','Состояние входа: включено')
+            confirmation,_=click(proc,active,'Отозвать правило','Отзыв окончательный')
+            status=control(proc);proc.kill();proc.wait(timeout=5)
+            proc,url=launch(now=status['now']+1,updateId=status['updateId'],priceUsd='120');page.goto(url)
+            revoked,old_confirmation=click(proc,confirmation,'Подтвердить окончательный отзыв','окончательно отозвано')
+            control(proc,callback=old_confirmation)
+            assert page.request.get(url+'/api/state').json()['rules'][0]['state']=='revoked'
+            click(proc,revoked,'Новое виртуальное правило','Введите mint')
+            control(proc,advanceMs=10000)
+            send(proc,'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v','Загружаем поддерживаемый пул')
+            # A restart can poll the previous binding before the new-mint update arrives.
+            # Keep the production cooldown: advance the fake clock and explicitly retry the new source.
+            source_state=page.request.get(url+'/api/state').json()
+            control(proc,advanceMs=max(10000,source_state['market']['nextPollAtMs']-source_state['now']+1))
+            send(proc,'/status','Состояние входа: отозвано')
+            menu=send(proc,'/help','Меню:')
+            pending,_=click(proc,menu,'Продолжить настройку','Mint: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
+            before_source=len(control(proc)['sent'])
+            click(proc,pending,'Повторить загрузку источника','Источник будет повторно проверен')
+            source,_=wait_message(proc,'Источник проверен',before_source)
+            click(proc,source,'Продолжить к цене входа','Введите цену')
+            send(proc,'100','Введите виртуальную сумму');send(proc,'1000','Введите срок');send(proc,'10','Введите TP');send(proc,'10','Введите SL')
+            review=send(proc,'10','Проверьте параметры')
+            created,confirm=click(proc,review,'Подтвердить создание','Виртуальное правило создано')
+            control(proc,callback=old_confirmation)
+            click(proc,created,'Включить правило','Ожидающее входное правило включено')
             control(proc,advanceMs=10000,priceUsd='100')
             opened,_=wait_message(proc,'Виртуальная позиция открыта')
             expect(page.locator('#position-card')).to_contain_text('Открыта')
@@ -82,16 +112,17 @@ with tempfile.TemporaryDirectory(prefix='bot-dialog-browser-') as tmp:
             detail_label=next(b['text'] for row in history['reply_markup']['inline_keyboard'] for b in row if b['text'].startswith('Подробнее:'))
             detail,_=click(proc,history,detail_label,'Зафиксированный результат: 70 USD')
             assert 'Основание входа:' in detail['text'] and 'Основание выхода:' in detail['text']
-            state=page.request.get(url+'/api/state').json();assert len(state['rules'])==1 and len(state['rules'][0]['operations'])==1
+            state=page.request.get(url+'/api/state').json();assert len(state['rules'])==2 and state['rules'][0]['state']=='revoked' and len(state['rules'][1]['operations'])==1
             page.locator('#refresh').click();expect(page.locator('#position-history')).to_contain_text('70 USD')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth');assert not errors,errors
             page.screenshot(path=str(RESULTS/'telegram-dialog-mobile.png'),full_page=True)
             report={'mode':'OFFLINE bot and market test transports; Chromium observes real HTTP/SQLite',
                     'checks':['menu_mint_validation_source','all_fields_with_pending_dialog_SIGKILL_restart_continue',
                               'review_refresh_version_confirmation_separate_enable_duplicate_confirmation',
+                              'cancel_revoke_confirm_SIGKILL_restart_final_revoke_new_mint_stale_confirmation',
                               'entry_notification_manual_close_new_snapshot_saved_result_history_detail',
-                              'one_rule_one_operation_mobile_no_overflow_no_JS_errors'],
-                    'result':'passed','pageErrors':errors,'rules':len(state['rules']),'operations':len(state['rules'][0]['operations']),
+                              'two_rules_first_revoked_one_operation_mobile_no_overflow_no_JS_errors'],
+                    'result':'passed','pageErrors':errors,'rules':len(state['rules']),'operations':sum(len(r['operations']) for r in state['rules']),
                     'positionResultUsd':state['positions'][0]['display']['pnlUsd']}
             (RESULTS/'telegram-dialog-browser.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n');print(json.dumps(report,ensure_ascii=False));browser.close()
     finally:

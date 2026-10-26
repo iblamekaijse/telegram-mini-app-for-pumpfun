@@ -82,6 +82,7 @@ export class TelegramDialog {
     if (r.operations.some(o => o.status === 'unknown')) text += '\nUnknown: повтор попытки запрещён.';
     const rows = [];
     if (r.config.id === s.currentRuleId && !r.submittedOperationId && !['finished','expired','revoked'].includes(r.state)) rows.push([this.c.button(t, r.state === 'active' ? 'Приостановить вход' : r.state === 'draft' ? 'Включить правило' : 'Возобновить вход', r.state === 'active' ? 'pause' : 'enable', id)]);
+    if (this.c.canRevoke(r, s)) rows.push([this.c.button(t, 'Отозвать правило', 'revoke', id)]);
     if (p?.status === 'open') rows.push([this.c.button(t, 'Запросить закрытие позиции', 'close', p.id)]);
     rows.push(...this.menu(t)); return { text, keyboard: { inline_keyboard: rows } };
   }

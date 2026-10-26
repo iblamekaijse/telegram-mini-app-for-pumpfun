@@ -1,3 +1,4 @@
+import { canRevokeRule, handleRevocation } from './telegram-revoke.mjs';
 import { TelegramDialog } from './telegram-dialog.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 
@@ -50,11 +51,13 @@ export class TelegramController {
     const entry = { id: random(), generation: t.generation, action, target, expiresAtMs: this.clock() + 86400_000 };
     t.callbacks.push(entry); return { text, callback_data: entry.id };
   }
+  canRevoke(rule, state) { return canRevokeRule(rule, state); }
   keyboard(t, s) {
     const rows = this.dialog.menu(t), r = s.rules.find(r => r.config.id === s.currentRuleId);
     if (r && !r.submittedOperationId && !['finished', 'expired', 'revoked'].includes(r.state)) {
       rows.push([this.button(t, r.state === 'active' ? 'Приостановить вход' : r.state === 'draft' ? 'Включить правило' : 'Возобновить вход', r.state === 'active' ? 'pause' : 'enable', r.config.id)]);
     }
+    if (this.canRevoke(r, s)) rows.push([this.button(t, 'Отозвать правило', 'revoke', r.config.id)]);
     const p = s.positions.find(p => p.status === 'open');
     if (p) rows.push([this.button(t, 'Запросить закрытие позиции', 'close', p.id)]);
     return { inline_keyboard: rows };
@@ -116,7 +119,8 @@ export class TelegramController {
         reply = { text: 'Кнопка устарела. Откройте актуальное меню через /start.' };
       } else {
         if (c && !reusable && c.usedUpdateId === undefined) { c.usedUpdateId = update.update_id; this.save(t); }
-        reply = this.dialog.handle(t, q ? '' : text, c, update.update_id);
+        reply = c && ['revoke', 'revoke_confirm', 'revoke_cancel'].includes(c.action)
+          ? handleRevocation(this, t, c, update.update_id) : this.dialog.handle(t, q ? '' : text, c, update.update_id);
         if (!reply && c && ['enable','pause','close'].includes(c.action)) {
           const s = this.view(), r = s.rules.find(r => r.config.id === c.target), p = s.positions.find(p => p.id === c.target);
           reply = { text: 'Объект изменился или кнопка устарела. Запросите текущее состояние.' };
