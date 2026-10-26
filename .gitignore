@@ -13,3 +13,6 @@ __pycache__/
 
 # Secret configuration in local backup archives.
 configuration.env
+
+# Local integration rehearsal reports and locks (may contain private operational IDs).
+.paper-live-check/

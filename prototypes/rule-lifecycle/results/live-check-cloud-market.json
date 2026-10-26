@@ -1,0 +1,117 @@
+{
+  "scope": "Cloud public market API only; no Telegram token, no WSL access; no rule created",
+  "startedAt": "2026-10-26T21:38:51.883Z",
+  "finishedAt": "2026-10-26T21:39:02.336Z",
+  "runtime": "Node 24.19.0",
+  "first": {
+    "status": "fresh",
+    "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+    "binding": {
+      "mode": "market-paper",
+      "provider": "dexscreener",
+      "chainId": "solana",
+      "dexId": "pumpswap",
+      "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "quoteMint": "So11111111111111111111111111111111111111112",
+      "priceField": "priceUsd"
+    },
+    "token": {
+      "name": "Fartcoin",
+      "symbol": "Fartcoin"
+    },
+    "snapshot": {
+      "mode": "market-paper",
+      "provider": "dexscreener",
+      "chainId": "solana",
+      "dexId": "pumpswap",
+      "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "quoteMint": "So11111111111111111111111111111111111111112",
+      "priceField": "priceUsd",
+      "id": "observation-acb62c06-e3f7-4aa5-9cd9-6cf13829ac99",
+      "idKind": "local-observation",
+      "type": "market-price-snapshot",
+      "assetId": "SOLANA:HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+      "observedAtMs": 1793050731884,
+      "receivedAtMs": 1793050732085,
+      "providerUpdatedAtMs": null,
+      "rawPriceUsd": "0.00009743",
+      "priceUnits": 97430,
+      "priceBasis": {
+        "unit": "quote-atomic-per-whole-base",
+        "quoteAssetId": "FIAT:USD",
+        "quoteDecimals": 9
+      }
+    },
+    "nextPollAtMs": 1793050742085,
+    "lastAttemptAtMs": 1793050731884,
+    "lastSuccessAtMs": 1793050732085,
+    "error": null,
+    "interruptions": 0,
+    "recoveries": 0,
+    "recoveredAtMs": null,
+    "pollIntervalMs": 10000,
+    "staleAfterMs": 45000,
+    "stale": false,
+    "snapshotUsable": true,
+    "pollStatus": "waiting"
+  },
+  "second": {
+    "status": "fresh",
+    "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+    "binding": {
+      "mode": "market-paper",
+      "provider": "dexscreener",
+      "chainId": "solana",
+      "dexId": "pumpswap",
+      "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "quoteMint": "So11111111111111111111111111111111111111112",
+      "priceField": "priceUsd"
+    },
+    "token": {
+      "name": "Fartcoin",
+      "symbol": "Fartcoin"
+    },
+    "snapshot": {
+      "mode": "market-paper",
+      "provider": "dexscreener",
+      "chainId": "solana",
+      "dexId": "pumpswap",
+      "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+      "pairAddress": "eUsB7o5HXb4xj3RD4eZjumRV6T65PQELbhd8mNFRjk6",
+      "quoteMint": "So11111111111111111111111111111111111111112",
+      "priceField": "priceUsd",
+      "id": "observation-0c96fa19-061f-420b-ae30-0f267e328b32",
+      "idKind": "local-observation",
+      "type": "market-price-snapshot",
+      "assetId": "SOLANA:HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+      "observedAtMs": 1793050742189,
+      "receivedAtMs": 1793050742336,
+      "providerUpdatedAtMs": null,
+      "rawPriceUsd": "0.00009743",
+      "priceUnits": 97430,
+      "priceBasis": {
+        "unit": "quote-atomic-per-whole-base",
+        "quoteAssetId": "FIAT:USD",
+        "quoteDecimals": 9
+      }
+    },
+    "nextPollAtMs": 1793050752336,
+    "lastAttemptAtMs": 1793050742189,
+    "lastSuccessAtMs": 1793050742336,
+    "error": null,
+    "interruptions": 0,
+    "recoveries": 0,
+    "recoveredAtMs": null,
+    "pollIntervalMs": 10000,
+    "staleAfterMs": 45000,
+    "stale": false,
+    "snapshotUsable": true,
+    "pollStatus": "waiting"
+  },
+  "pinned": true,
+  "newObservation": true,
+  "providerPriceAge": "unknown; timestamps are local observations"
+}

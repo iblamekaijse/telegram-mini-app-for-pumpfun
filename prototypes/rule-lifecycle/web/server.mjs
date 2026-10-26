@@ -21,8 +21,9 @@ const staticFiles = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
 ]);
-export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173, marketFetch = fetch, clock = Date.now, telegramToken = process.env.TELEGRAM_BOT_TOKEN ?? '', telegramTransport, expectedBotId = '' } = {}) {
+export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173, marketFetch = fetch, clock = Date.now, telegramToken = process.env.TELEGRAM_BOT_TOKEN ?? '', telegramTransport, expectedBotId = '', beforeWorkers = () => {} } = {}) {
   const service = await createPanelService({ dataDir, marketFetch, clock, telegramConfigured: !!(telegramToken || telegramTransport), deferTelegramResume: true });
+  try { beforeWorkers(service); } catch (error) { service.close(); throw error; }
   let mutations = Promise.resolve();
   const serial = fn => { const result = mutations.then(fn); mutations = result.catch(() => {}); return result; };
   const server = createServer(async (req, res) => {
@@ -92,7 +93,9 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
     }).finally(() => { polling = false; });
   }, 1000);
   timer.unref();
-  return { url: `http://127.0.0.1:${server.address().port}`, close: async () => {
+  // In-process operational tools share the same serializer and the sole Telegram worker.
+  // These handles are never exposed over HTTP.
+  return { service, serial, url: `http://127.0.0.1:${server.address().port}`, close: async () => {
     closing = true; clearInterval(timer);
     await bot?.close();
     while (polling) await new Promise(resolve => setTimeout(resolve, 10));
