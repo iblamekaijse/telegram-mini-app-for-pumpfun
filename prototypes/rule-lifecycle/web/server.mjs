@@ -1,3 +1,5 @@
+import { settings } from '../ops/config.mjs';
+import { TelegramTransport, runTelegram } from './telegram.mjs';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
@@ -19,8 +21,8 @@ const staticFiles = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
 ]);
-export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173, marketFetch = fetch, clock = Date.now } = {}) {
-  const service = await createPanelService({ dataDir, marketFetch, clock });
+export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173, marketFetch = fetch, clock = Date.now, telegramToken = process.env.TELEGRAM_BOT_TOKEN ?? '', telegramTransport, expectedBotId = '' } = {}) {
+  const service = await createPanelService({ dataDir, marketFetch, clock, telegramConfigured: !!(telegramToken || telegramTransport), deferTelegramResume: true });
   let mutations = Promise.resolve();
   const serial = fn => { const result = mutations.then(fn); mutations = result.catch(() => {}); return result; };
   const server = createServer(async (req, res) => {
@@ -36,6 +38,7 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
         const [file, type] = staticFiles.get(url.pathname);
         res.writeHead(200, { 'Content-Type': type }); res.end(readFileSync(join(directory, 'public', file))); return;
       }
+      if (req.method === 'GET' && url.pathname === '/api/diagnostics') { json(200, { dbPath: resolve(dataDir, 'state.sqlite'), ...service.diagnostics() }); return; }
       if (req.method === 'GET' && url.pathname === '/api/state') { json(200, service.state()); return; }
       if (req.method !== 'POST') { json(404, { error: 'NOT_FOUND', message: 'Страница не найдена.' }); return; }
       if (req.headers.origin && req.headers.origin !== url.origin) throw new PanelError('LOCAL_ONLY', 'Запрос должен быть отправлен из локальной панели.', {}, 403);
@@ -48,10 +51,17 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
       let body;
       try { body = JSON.parse(raw); if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error(); }
       catch { throw new PanelError('INVALID_JSON', 'Не удалось прочитать данные запроса.'); }
+      const positionMatch = url.pathname.match(/^\/api\/positions\/([a-zA-Z0-9_-]+)\/close$/);
       const match = url.pathname.match(/^\/api\/rules\/([a-zA-Z0-9_-]+)\/([a-z_-]+)$/);
-      const result = await serial(() => {
-        if (url.pathname === '/api/market/select') return service.selectMarket(body);
+      const result = url.pathname === '/api/market/select' ? await (async () => {
+        const work = await serial(() => service.beginMarketSelect(body));
+        const fetched = await work.promise;
+        return serial(() => service.finishMarketSelect(fetched));
+      })() : await serial(() => {
+        if (url.pathname === '/api/telegram/code') return { ...service.state(), telegramLink: service.telegram.createCode() };
+        if (url.pathname === '/api/telegram/unlink') { service.telegram.unlink(); return service.state(); }
         if (url.pathname === '/api/rules') return service.create(body);
+        if (positionMatch) return service.closePosition(positionMatch[1], body);
         if (!match) throw new PanelError('NOT_FOUND', 'Действие не найдено.', {}, 404);
         return match[2] === 'price' ? service.price(match[1], body) : service.command(match[1], match[2], body);
       });
@@ -67,11 +77,16 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
   });
   try { await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolveListen); }); }
   catch (error) { service.close(); throw error; }
+  const bot = telegramToken || telegramTransport ? runTelegram({ controller: service.telegram, transport: telegramTransport ?? new TelegramTransport(telegramToken), serial, expectedBotId }) : null;
   let polling = false, closing = false;
   const timer = setInterval(() => {
     if (polling || closing) return;
     polling = true;
-    serial(() => service.pollMarket()).catch(error => {
+    (async () => {
+      const work = await serial(() => service.beginMarketPoll());
+      const fetched = await work.promise;
+      return serial(() => service.finishMarket(fetched));
+    })().catch(error => {
       // Storage errors stay fail-closed in RuleEngine; never replace history.
       console.error(`Опрос остановлен: ${error.code ?? 'INTERNAL_ERROR'}`);
     }).finally(() => { polling = false; });
@@ -79,6 +94,8 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
   timer.unref();
   return { url: `http://127.0.0.1:${server.address().port}`, close: async () => {
     closing = true; clearInterval(timer);
+    await bot?.close();
+    while (polling) await new Promise(resolve => setTimeout(resolve, 10));
     await new Promise((done, fail) => server.close(error => error ? fail(error) : done()));
     await mutations; service.close();
   } };
@@ -86,10 +103,11 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const port = Number(process.env.DEMO_PORT ?? 4173);
+    const config = settings();
+    const port = config.port;
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid DEMO_PORT');
-    const app = await startPanel({ dataDir: process.env.DEMO_DATA_DIR ? resolve(process.env.DEMO_DATA_DIR) : undefined, port });
+    const app = await startPanel({ dataDir: config.dataDir, port, telegramToken: config.token, expectedBotId: config.botId });
     console.log(JSON.stringify({ mode: 'DEMO', url: app.url, message: 'Локальный доверенный доступ. Реальная торговля закрыта.' }));
     for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { app.close().then(() => process.exit(0), error => { console.error(error.message); process.exit(1); }); });
-  } catch (error) { console.error(`Панель не запущена: ${error.code ?? error.message}. История не сброшена.`); process.exitCode = 1; }
+  } catch (error) { console.error(`Панель не запущена: ${error.code ?? 'CONFIG_OR_RUNTIME_ERROR'}. История не сброшена. Запустите npm run doctor; при STORAGE_BUSY остановите второй экземпляр.`); process.exitCode = 1; }
 }

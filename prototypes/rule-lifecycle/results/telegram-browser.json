@@ -1,0 +1,19 @@
+{
+  "mode": "OFFLINE test transports; not live Telegram",
+  "checks": [
+    "UI_code_private_owner_binding_random_start_denied",
+    "UI_create_enable_entry_notification_status_foreign_callback_denied_manual_close_new_snapshot_result",
+    "SIGKILL_new_process_restores_binding_position_queue_no_repeated_trade",
+    "UI_unlink_revokes_old_buttons_mobile_no_overflow"
+  ],
+  "javascriptErrors": [],
+  "testsUseTemporarySQLite": true,
+  "desktop": [
+    1440,
+    1080
+  ],
+  "mobile": [
+    390,
+    844
+  ]
+}

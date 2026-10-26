@@ -1,8 +1,11 @@
+import { emptyTelegramState, validateTelegramState } from './telegram-state.mjs';
 import assert from 'node:assert/strict';
 import { canonical, priceBasisValid, sourceIdValid, sourceEventValid } from './event-contract.mjs';
 import { assetValid, marketBindingValid, marketSnapshotValid, MARKET_PRICE_BASIS } from './market-contract.mjs';
 
-export const emptySnapshot = () => ({ version: 3, nextOperation: 1, nextIncident: 1, sourceDecisions: [], rules: [], operations: [], commands: [], events: [], streams: [] });
+import { positionPolicyValid, positionValues, exitReason, sameBinding, sameExact } from './position-model.mjs';
+
+export const emptySnapshot = () => ({ version: 7, telegram: emptyTelegramState(), positions: [], nextOperation: 1, nextIncident: 1, sourceDecisions: [], rules: [], operations: [], commands: [], events: [], streams: [] });
 const integer = (v, min = 0) => Number.isSafeInteger(v) && v >= min;
 const id = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && v.trim() === v;
 const asset = v => id(v) && assetValid(v);
@@ -29,7 +32,7 @@ function event(e) {
 
 /** Versioned format and cross-references; not authentication against a malicious file owner. */
 export function validateSnapshot(state) {
-  assert([1, 2, 3].includes(state?.version));
+  assert([1, 2, 3, 4, 5, 6, 7].includes(state?.version));
   if (state.version === 1) {
     assert(!Object.hasOwn(state, 'streams'));
     state = { ...state, version: 2, streams: [] }; // Lossless v1 upgrade; no source is inferred.
@@ -42,6 +45,24 @@ export function validateSnapshot(state) {
     }]) };
     state.nextIncident = nextIncident;
   }
+  if (state.version === 3) {
+    assert(!Object.hasOwn(state, 'positions'));
+    state = { ...state, version: 4, positions: [] }; // Old rules never become positions.
+  }
+  if (state.version === 4) {
+    assert(!Object.hasOwn(state, 'telegram'));
+    state = { ...state, version: 7, telegram: emptyTelegramState() };
+  }
+  if (state.version === 5) {
+    assert(state.telegram?.version === 1 && !Object.hasOwn(state.telegram, 'dialog'));
+    state = { ...state, version: 7, telegram: { ...state.telegram, version: 3, botId: null, dialog: null } };
+  }
+  if (state.version === 6) {
+    assert(state.telegram?.version === 2 && !Object.hasOwn(state.telegram, 'botId'));
+    state = { ...state, version: 7, telegram: { ...state.telegram, version: 3, botId: null } };
+  }
+  validateTelegramState(state.telegram);
+  const positions = pairs(state.positions);
   assert(integer(state.nextOperation, 1));
   assert(integer(state.nextIncident, 1) && Array.isArray(state.sourceDecisions));
   const rules = pairs(state.rules), operations = pairs(state.operations);
@@ -51,6 +72,7 @@ export function validateSnapshot(state) {
     const c = r.config, l = c?.limits;
     assert(id(key) && c?.id === key && asset(c.assetId) && ruleStates.has(r.state));
     assert(c.assetId.startsWith('DEMO:') ? !c.market : marketBindingValid(c.market) && c.assetId === `SOLANA:${c.market.mint}` && canonical(c.condition?.priceBasis) === canonical(MARKET_PRICE_BASIS));
+    if (c.position) assert(marketBindingValid(c.market) && positionPolicyValid(c.position));
     assert(c.condition?.metric === 'priceUnits' && c.condition.operator === 'lte' && integer(c.condition.thresholdUnits, 1));
     if (c.condition.priceBasis !== undefined) assert(priceBasisValid(c.condition.priceBasis));
     assert(integer(c.amountUnits, 1) && integer(c.expiresAtMs) && integer(r.createdAtMs) && typeof r.reason === 'string');
@@ -95,11 +117,14 @@ export function validateSnapshot(state) {
   for (const [key, c] of commands) {
     assert(id(key) && typeof c.fingerprint === 'string');
     const request = JSON.parse(c.fingerprint);
-    assert(['create', 'enable', 'pause', 'revoke', 'execute', 'bindSource', 'sourceDecision'].includes(request.action));
+    assert(['create', 'enable', 'pause', 'revoke', 'execute', 'bindSource', 'sourceDecision', 'closePosition'].includes(request.action));
     if (request.action === 'execute') {
       assert.equal(c.operationId, request.operationId);
       assert(operations.has(c.operationId));
       assert(!Object.hasOwn(c, 'result'));
+    } else if (request.action === 'closePosition') {
+      const p = positions.get(request.positionId);
+      assert(p && c.result?.positionId === p.id && c.result.ruleId === p.ruleId && c.result.action === 'close_requested');
     } else {
       const ruleId = request.action === 'create' ? request.config?.id : request.ruleId;
       assert(rules.has(ruleId) && c.result?.ruleId === ruleId && typeof c.result.action === 'string');
@@ -174,5 +199,43 @@ export function validateSnapshot(state) {
     assert(command.result.outcome === entry.outcome && command.result.incidentId === entry.incidentId);
   }
   for (const [key, command] of commands) if (JSON.parse(command.fingerprint).action === 'sourceDecision') assert(decisionRequests.has(key));
+  assert([...positions.values()].filter(p => p.status !== 'closed').length <= 1);
+  for (const [key, p] of positions) {
+    const r = rules.get(p.ruleId), o = operations.get(p.operationId);
+    assert(p.id === key && key === `position-${p.operationId}` && o?.ruleId === p.ruleId);
+    assert(r?.config.position && o.status === 'succeeded' && o.result.kind === 'virtual-condition');
+    assert(sameExact(p.entry, o.event) && sameExact(p.binding, r.config.market) && sameExact(p.policy, r.config.position));
+    assert(p.amountUnits === r.config.amountUnits && integer(p.openedAtMs));
+    assert(['open', 'close_requested', 'closed'].includes(p.status) && Array.isArray(p.observations));
+    assert(marketSnapshotValid(p.last) && sameBinding(p.binding, p.last));
+    let last = p.entry;
+    const ids = new Set([p.entry.id]);
+    let closed = false;
+    for (const observation of p.observations) {
+      const e = observation.snapshot;
+      assert(marketSnapshotValid(e) && sameBinding(p.binding, e) && !ids.has(e.id)); ids.add(e.id);
+      assert(['valued', 'closed', 'ignored_closed', 'ignored_future', 'ignored_stale', 'ignored_out_of_order'].includes(observation.disposition));
+      if (['valued', 'closed'].includes(observation.disposition)) {
+        assert(!closed && e.observedAtMs > last.observedAtMs); last = e;
+        if (observation.disposition === 'closed') closed = true;
+      }
+    }
+    assert(sameExact(p.last, last));
+    assert((p.status === 'closed') === closed);
+    if (p.closeRequest) {
+      const c = commands.get(p.closeRequest.requestId);
+      assert(integer(p.closeRequest.requestedAtMs) && ids.has(p.closeRequest.afterSnapshotId) && c?.result?.positionId === p.id);
+    }
+    if (p.status === 'close_requested') assert(p.closeRequest);
+    if (p.exit) {
+      assert(closed && sameExact(p.exit.snapshot, last) && integer(p.exit.closedAtMs));
+      assert(['take_profit', 'stop_loss', 'user_request'].includes(p.exit.reason));
+      const manualEligible = p.closeRequest && last.observedAtMs > p.closeRequest.requestedAtMs;
+      assert.equal(p.exit.reason, manualEligible ? 'user_request' : exitReason(p.entry.priceUnits, last.priceUnits, p.policy));
+      assert(sameExact(p.exit.values, positionValues(p.amountUnits, p.entry.priceUnits, last.priceUnits, p.policy)));
+    } else assert(!closed);
+  }
+  // Every confirmed position entry has exactly its corresponding durable position.
+  for (const o of operations.values()) if (rules.get(o.ruleId).config.position && o.status === 'succeeded') assert(positions.has(`position-${o.id}`));
   return state;
 }

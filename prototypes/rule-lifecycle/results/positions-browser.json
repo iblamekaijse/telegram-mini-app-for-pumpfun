@@ -1,0 +1,29 @@
+{
+  "mode": "OFFLINE SAVED RESPONSE + EXPLICIT TEST PRICES; ACTUAL HTTP/SQLITE/BROWSER",
+  "checks": [
+    "create_enable_new_snapshot_entry_and_valuation_reload_no_duplicate",
+    "killed_server_open_position_restored_no_cached_valuation_or_exit_new_data_recovers_after_entry_expiry",
+    "manual_request_waits_after_reload_next_snapshot_107_result_70_7percent",
+    "take_profit_full_ui_cycle_and_persistent_result",
+    "stop_loss_full_ui_cycle_and_persistent_result"
+  ],
+  "positions": [
+    {
+      "status": "closed",
+      "reason": "user_request",
+      "pnlUsd": "70"
+    },
+    {
+      "status": "closed",
+      "reason": "take_profit",
+      "pnlUsd": "100"
+    },
+    {
+      "status": "closed",
+      "reason": "stop_loss",
+      "pnlUsd": "-100"
+    }
+  ],
+  "pageErrors": [],
+  "result": "passed"
+}

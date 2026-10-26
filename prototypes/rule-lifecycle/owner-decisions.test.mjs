@@ -295,7 +295,7 @@ test('v2 migration assigns a stable incident ID without losing unknown, cursor o
   const f = fixture(t), { source } = seed(f, { unknown: true });
   const raw = new DatabaseSync(f.storagePath);
   const saved = JSON.parse(raw.prepare('SELECT payload FROM snapshot').get().payload);
-  saved.version = 2; delete saved.nextIncident; delete saved.sourceDecisions;
+  saved.version = 2; delete saved.nextIncident; delete saved.sourceDecisions; delete saved.positions; delete saved.telegram;
   for (const [, stream] of saved.streams) {
     delete stream.freshAfterMs; delete stream.issue.id; delete stream.issue.ruleId;
   }

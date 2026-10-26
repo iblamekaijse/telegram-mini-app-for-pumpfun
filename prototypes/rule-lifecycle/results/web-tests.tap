@@ -1,823 +1,926 @@
 
 > demo-rule-lifecycle@0.0.0 test
-> node --test --test-reporter=tap rule-engine.test.mjs persistence.test.mjs source.test.mjs owner-decisions.test.mjs web.test.mjs market.test.mjs market-reselection.test.mjs
+> node --test --test-reporter=tap rule-engine.test.mjs persistence.test.mjs source.test.mjs owner-decisions.test.mjs web.test.mjs market.test.mjs market-reselection.test.mjs positions.test.mjs
 
 TAP version 13
 # Subtest: same mint within cooldown retains the exact usable snapshot and pinned pool without HTTP or re-delivery
 ok 1 - same mint within cooldown retains the exact usable snapshot and pinned pool without HTTP or re-delivery
   ---
-  duration_ms: 23.373223
+  duration_ms: 25.711134
   type: 'test'
   ...
 # Subtest: changing mint discards the old snapshot and binding while retaining the shared request deadline
 ok 2 - changing mint discards the old snapshot and binding while retaining the shared request deadline
   ---
-  duration_ms: 0.815608
+  duration_ms: 1.175153
   type: 'test'
   ...
 # Subtest: reselection preserves an error and Retry-After even when the old snapshot has not aged out
 ok 3 - reselection preserves an error and Retry-After even when the old snapshot has not aged out
   ---
-  duration_ms: 1.653639
+  duration_ms: 2.165788
   type: 'test'
   ...
 # Subtest: a stale snapshot remains unusable during cooldown; selecting it does not refresh timestamps
 ok 4 - a stale snapshot remains unusable during cooldown; selecting it does not refresh timestamps
   ---
-  duration_ms: 0.669378
+  duration_ms: 0.920919
   type: 'test'
   ...
 # Subtest: creation uses the same strict snapshot eligibility after reselection, mint change, outage and recovery
 ok 5 - creation uses the same strict snapshot eligibility after reselection, mint change, outage and recovery
   ---
-  duration_ms: 13.446991
+  duration_ms: 14.24149
   type: 'test'
   ...
 # Subtest: finished → repeated same-mint selection → new rule → one operation → reopen preserves both histories
 ok 6 - finished → repeated same-mint selection → new rule → one operation → reopen preserves both histories
   ---
-  duration_ms: 20.858206
+  duration_ms: 28.168817
   type: 'test'
   ...
 # Subtest: expired → repeated same-mint selection → new rule → one operation → reopen preserves both histories
 ok 7 - expired → repeated same-mint selection → new rule → one operation → reopen preserves both histories
   ---
-  duration_ms: 20.573698
+  duration_ms: 17.974333
   type: 'test'
   ...
 # Subtest: revoked → repeated same-mint selection → new rule → one operation → reopen preserves both histories
 ok 8 - revoked → repeated same-mint selection → new rule → one operation → reopen preserves both histories
   ---
-  duration_ms: 17.415996
+  duration_ms: 13.893645
   type: 'test'
   ...
 # Subtest: fresh source/reselection does not clear unknown; explicit revocation keeps its result when a separate rule is created
 ok 9 - fresh source/reselection does not clear unknown; explicit revocation keeps its result when a separate rule is created
   ---
-  duration_ms: 19.2196
+  duration_ms: 8.390431
   type: 'test'
   ...
 # Subtest: offline public fixture: exact mint, supported PumpSwap orientation, deterministic pool selection
 ok 10 - offline public fixture: exact mint, supported PumpSwap orientation, deterministic pool selection
   ---
-  duration_ms: 3.1027
+  duration_ms: 2.798292
   type: 'test'
   ...
 # Subtest: USD values use exact fixed units; incompatible precision and invalid addresses are rejected
 ok 11 - USD values use exact fixed units; incompatible precision and invalid addresses are rejected
   ---
-  duration_ms: 0.447053
+  duration_ms: 0.428727
   type: 'test'
   ...
 # Subtest: one rate gate covers lookup and polling; 429 honours Retry-After
 ok 12 - one rate gate covers lookup and polling; 429 honours Retry-After
   ---
-  duration_ms: 4.070167
+  duration_ms: 3.829469
   type: 'test'
   ...
 # Subtest: unavailable data never re-emits a previous price; stale observation and recovery are explicit
 ok 13 - unavailable data never re-emits a previous price; stale observation and recovery are explicit
   ---
-  duration_ms: 1.241288
+  duration_ms: 1.321615
   type: 'test'
   ...
 # Subtest: pinned pool disappearing is no_data even if another eligible pool exists
 ok 14 - pinned pool disappearing is no_data even if another eligible pool exists
   ---
-  duration_ms: 0.799233
+  duration_ms: 0.743902
   type: 'test'
   ...
 # Subtest: missing/null or too precise USD price is not replaced by priceNative or synthetic data
 ok 15 - missing/null or too precise USD price is not replaced by priceNative or synthetic data
   ---
-  duration_ms: 1.810125
+  duration_ms: 1.820307
   type: 'test'
   ...
 # Subtest: offline integration: saved response → rule → high/low observations → virtual result → SQLite restart
 ok 16 - offline integration: saved response → rule → high/low observations → virtual result → SQLite restart
   ---
-  duration_ms: 15.803789
+  duration_ms: 13.712362
   type: 'test'
   ...
 # Subtest: no_data/stale input cannot create a market rule; active rules cannot switch sources or accept DEMO prices
 ok 17 - no_data/stale input cannot create a market rule; active rules cannot switch sources or accept DEMO prices
   ---
-  duration_ms: 4.833355
+  duration_ms: 8.175417
   type: 'test'
   ...
 # Subtest: core rejects wrong mint/pool/provider/units and synthetic injection; valid repeated observation creates one intent
 ok 18 - core rejects wrong mint/pool/provider/units and synthetic injection; valid repeated observation creates one intent
   ---
-  duration_ms: 1.100326
+  duration_ms: 1.10683
   type: 'test'
   ...
 # Subtest: older observations cannot become a new signal; pause, expiry and revoke retain core gates
 ok 19 - older observations cannot become a new signal; pause, expiry and revoke retain core gates
   ---
-  duration_ms: 1.006155
+  duration_ms: 1.107411
   type: 'test'
   ...
 # Subtest: market unknown survives SQLite reopen and fresh snapshots cannot unblock it
 ok 20 - market unknown survives SQLite reopen and fresh snapshots cannot unblock it
   ---
-  duration_ms: 2.948408
+  duration_ms: 2.812544
   type: 'test'
   ...
 # Subtest: panel restoration cancels a prepared pre-restart signal and requires explicit enabling with a new observation
 ok 21 - panel restoration cancels a prepared pre-restart signal and requires explicit enabling with a new observation
   ---
-  duration_ms: 4.380363
+  duration_ms: 3.633282
   type: 'test'
   ...
 # Subtest: HTTP adapter polls automatically and rejects mode injection; transport injection is test-only
 ok 22 - HTTP adapter polls automatically and rejects mode injection; transport injection is test-only
   ---
-  duration_ms: 1361.950577
+  duration_ms: 1357.688012
   type: 'test'
   ...
 # Subtest: owner revocation stops the incident permanently and preserves all prior rule parameters and operations
 ok 23 - owner revocation stops the incident permanently and preserves all prior rule parameters and operations
   ---
-  duration_ms: 6.094193
+  duration_ms: 6.004891
   type: 'test'
   ...
 # Subtest: retry records an unavailable attempt; same key cannot change its meaning after history becomes available
 ok 24 - retry records an unavailable attempt; same key cannot change its meaning after history becomes available
   ---
-  duration_ms: 0.992864
+  duration_ms: 1.071407
   type: 'test'
   ...
 # Subtest: verified recovery consumes backlog without a purchase, requires enable, and rejects accumulated pre-decision prices
 ok 25 - verified recovery consumes backlog without a purchase, requires enable, and rejects accumulated pre-decision prices
   ---
-  duration_ms: 1.535962
+  duration_ms: 2.083574
   type: 'test'
   ...
 # Subtest: full recovery checks already processed facts and rejects a conflicting prefix
 ok 26 - full recovery checks already processed facts and rejects a conflicting prefix
   ---
-  duration_ms: 1.148008
+  duration_ms: 0.775921
   type: 'test'
   ...
 # Subtest: plain ownerId, cloned contexts and grants for another rule are not authorization
 ok 27 - plain ownerId, cloned contexts and grants for another rule are not authorization
   ---
-  duration_ms: 0.984922
+  duration_ms: 0.652604
   type: 'test'
   ...
 # Subtest: duplicate old decision cannot clear a new incident; stale decisions and command-key conflicts are rejected
 ok 28 - duplicate old decision cannot clear a new incident; stale decisions and command-key conflicts are rejected
   ---
-  duration_ms: 0.706684
+  duration_ms: 0.886758
   type: 'test'
   ...
 # Subtest: a decision for one rule cannot resolve the current incident of another even with a grant for both
 ok 29 - a decision for one rule cannot resolve the current incident of another even with a grant for both
   ---
-  duration_ms: 0.553112
+  duration_ms: 0.637082
   type: 'test'
   ...
 # Subtest: verification cannot clear a newer incident introduced before it returns
 ok 30 - verification cannot clear a newer incident introduced before it returns
   ---
-  duration_ms: 0.922058
+  duration_ms: 1.211488
   type: 'test'
   ...
 # Subtest: acknowledging a lost gap is explicitly unsupported and never changes the cursor or permissions
 ok 31 - acknowledging a lost gap is explicitly unsupported and never changes the cursor or permissions
   ---
-  duration_ms: 0.974306
+  duration_ms: 0.824925
   type: 'test'
   ...
 # Subtest: retry_history cannot clear unknown or reset the consumed attempt and configured limits
 ok 32 - retry_history cannot clear unknown or reset the consumed attempt and configured limits
   ---
-  duration_ms: 1.105153
+  duration_ms: 1.341684
   type: 'test'
   ...
 # Subtest: revoke cannot clear unknown or reset the consumed attempt and configured limits
 ok 33 - revoke cannot clear unknown or reset the consumed attempt and configured limits
   ---
-  duration_ms: 1.024372
+  duration_ms: 0.73556
   type: 'test'
   ...
 # Subtest: accept_gap cannot clear unknown or reset the consumed attempt and configured limits
 ok 34 - accept_gap cannot clear unknown or reset the consumed attempt and configured limits
   ---
-  duration_ms: 0.555035
+  duration_ms: 0.910874
   type: 'test'
   ...
 # Subtest: expiry during history verification is persisted together with the decision and cannot be re-enabled
 ok 35 - expiry during history verification is persisted together with the decision and cannot be re-enabled
   ---
-  duration_ms: 1.464364
+  duration_ms: 1.266652
   type: 'test'
   ...
 # Subtest: SIGKILL before_owner_decision_commit (revoke): another process sees an atomic journal/state/command and repeats safely
 ok 36 - SIGKILL before_owner_decision_commit (revoke): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 336.59889
+  duration_ms: 278.201526
   type: 'test'
   ...
 # Subtest: SIGKILL inside_owner_decision_transaction (revoke): another process sees an atomic journal/state/command and repeats safely
 ok 37 - SIGKILL inside_owner_decision_transaction (revoke): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 276.800393
+  duration_ms: 248.388418
   type: 'test'
   ...
 # Subtest: SIGKILL after_owner_decision_commit (revoke): another process sees an atomic journal/state/command and repeats safely
 ok 38 - SIGKILL after_owner_decision_commit (revoke): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 296.507372
+  duration_ms: 253.122112
   type: 'test'
   ...
 # Subtest: SIGKILL before_owner_decision_commit (retry_history): another process sees an atomic journal/state/command and repeats safely
 ok 39 - SIGKILL before_owner_decision_commit (retry_history): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 269.290288
+  duration_ms: 237.58065
   type: 'test'
   ...
 # Subtest: SIGKILL inside_owner_decision_transaction (retry_history): another process sees an atomic journal/state/command and repeats safely
 ok 40 - SIGKILL inside_owner_decision_transaction (retry_history): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 515.734164
+  duration_ms: 242.829145
   type: 'test'
   ...
 # Subtest: SIGKILL after_owner_decision_commit (retry_history): another process sees an atomic journal/state/command and repeats safely
 ok 41 - SIGKILL after_owner_decision_commit (retry_history): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 321.152159
+  duration_ms: 231.247116
   type: 'test'
   ...
 # Subtest: SIGKILL before_owner_decision_commit (accept_gap): another process sees an atomic journal/state/command and repeats safely
 ok 42 - SIGKILL before_owner_decision_commit (accept_gap): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 302.350539
+  duration_ms: 273.526096
   type: 'test'
   ...
 # Subtest: SIGKILL inside_owner_decision_transaction (accept_gap): another process sees an atomic journal/state/command and repeats safely
 ok 43 - SIGKILL inside_owner_decision_transaction (accept_gap): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 260.064965
+  duration_ms: 331.718399
   type: 'test'
   ...
 # Subtest: SIGKILL after_owner_decision_commit (accept_gap): another process sees an atomic journal/state/command and repeats safely
 ok 44 - SIGKILL after_owner_decision_commit (accept_gap): another process sees an atomic journal/state/command and repeats safely
   ---
-  duration_ms: 252.673785
+  duration_ms: 248.79066
   type: 'test'
   ...
 # Subtest: a failed decision write persists no journal, command or resolution, then a new process can repeat it
 ok 45 - a failed decision write persists no journal, command or resolution, then a new process can repeat it
   ---
-  duration_ms: 223.194002
+  duration_ms: 210.418792
   type: 'test'
   ...
 # Subtest: stale incidents and independent unknown block survive restart after stream recovery
 ok 46 - stale incidents and independent unknown block survive restart after stream recovery
   ---
-  duration_ms: 325.322922
+  duration_ms: 311.767091
   type: 'test'
   ...
 # Subtest: v2 migration assigns a stable incident ID without losing unknown, cursor or command identity
 ok 47 - v2 migration assigns a stable incident ID without losing unknown, cursor or command identity
   ---
-  duration_ms: 234.426099
+  duration_ms: 205.722017
   type: 'test'
   ...
 # Subtest: acknowledged draft and command fingerprints survive SIGKILL and another process
 ok 48 - acknowledged draft and command fingerprints survive SIGKILL and another process
   ---
-  duration_ms: 112.311291
+  duration_ms: 84.962609
   type: 'test'
   ...
 # Subtest: acknowledged active and command fingerprints survive SIGKILL and another process
 ok 49 - acknowledged active and command fingerprints survive SIGKILL and another process
   ---
-  duration_ms: 111.865485
+  duration_ms: 101.859976
   type: 'test'
   ...
 # Subtest: acknowledged paused and command fingerprints survive SIGKILL and another process
 ok 50 - acknowledged paused and command fingerprints survive SIGKILL and another process
   ---
-  duration_ms: 111.930502
+  duration_ms: 80.257479
   type: 'test'
   ...
 # Subtest: acknowledged revoked and command fingerprints survive SIGKILL and another process
 ok 51 - acknowledged revoked and command fingerprints survive SIGKILL and another process
   ---
-  duration_ms: 124.078114
+  duration_ms: 94.601138
   type: 'test'
   ...
 # Subtest: persisted succeeded result and repeated requests survive a killed process without another handoff
 ok 52 - persisted succeeded result and repeated requests survive a killed process without another handoff
   ---
-  duration_ms: 133.675144
+  duration_ms: 90.438727
   type: 'test'
   ...
 # Subtest: persisted failed result and repeated requests survive a killed process without another handoff
 ok 53 - persisted failed result and repeated requests survive a killed process without another handoff
   ---
-  duration_ms: 112.776002
+  duration_ms: 130.813537
   type: 'test'
   ...
 # Subtest: persisted unknown result and repeated requests survive a killed process without another handoff
 ok 54 - persisted unknown result and repeated requests survive a killed process without another handoff
   ---
-  duration_ms: 105.284959
+  duration_ms: 94.903804
   type: 'test'
   ...
 # Subtest: persisted throw result and repeated requests survive a killed process without another handoff
 ok 55 - persisted throw result and repeated requests survive a killed process without another handoff
   ---
-  duration_ms: 114.268062
+  duration_ms: 91.401735
   type: 'test'
   ...
 # Subtest: crash after prepared commit leaves a safe unsubmitted intent; duplicate event shares its ID
 ok 56 - crash after prepared commit leaves a safe unsubmitted intent; duplicate event shares its ID
   ---
-  duration_ms: 169.325865
+  duration_ms: 135.409834
   type: 'test'
   ...
 # Subtest: SIGKILL at after_dispatch_commit: unresolved handoff recovers as unknown and never resubmits
 ok 57 - SIGKILL at after_dispatch_commit: unresolved handoff recovers as unknown and never resubmits
   ---
-  duration_ms: 343.006504
+  duration_ms: 146.139785
   type: 'test'
   ...
 # Subtest: SIGKILL at after_handoff: unresolved handoff recovers as unknown and never resubmits
 ok 58 - SIGKILL at after_handoff: unresolved handoff recovers as unknown and never resubmits
   ---
-  duration_ms: 228.197864
+  duration_ms: 130.612094
   type: 'test'
   ...
 # Subtest: SIGKILL at before_result_commit: unresolved handoff recovers as unknown and never resubmits
 ok 59 - SIGKILL at before_result_commit: unresolved handoff recovers as unknown and never resubmits
   ---
-  duration_ms: 196.402486
+  duration_ms: 148.484819
   type: 'test'
   ...
 # Subtest: crash after result commit but before reply preserves success without a second handoff
 ok 60 - crash after result commit but before reply preserves success without a second handoff
   ---
-  duration_ms: 138.313129
+  duration_ms: 100.117928
   type: 'test'
   ...
 # Subtest: recovery checks exact expiry, cancels prepared work and cannot replay old enable
 ok 61 - recovery checks exact expiry, cancels prepared work and cannot replay old enable
   ---
-  duration_ms: 161.491642
+  duration_ms: 137.317512
   type: 'test'
   ...
 # Subtest: freshness is checked again after a restart before the prepared intent can be dispatched
 ok 62 - freshness is checked again after a restart before the prepared intent can be dispatched
   ---
-  duration_ms: 98.128388
+  duration_ms: 122.667165
   type: 'test'
   ...
 # Subtest: a killed in-flight operation becomes unknown while preserving paused rule semantics
 ok 63 - a killed in-flight operation becomes unknown while preserving paused rule semantics
   ---
-  duration_ms: 102.023551
+  duration_ms: 104.553626
   type: 'test'
   ...
 # Subtest: a killed in-flight operation becomes unknown while preserving revoked rule semantics
 ok 64 - a killed in-flight operation becomes unknown while preserving revoked rule semantics
   ---
-  duration_ms: 93.384142
+  duration_ms: 146.752736
   type: 'test'
   ...
 # Subtest: a killed in-flight operation becomes unknown while preserving expired rule semantics
 ok 65 - a killed in-flight operation becomes unknown while preserving expired rule semantics
   ---
-  duration_ms: 91.056123
+  duration_ms: 101.807378
   type: 'test'
   ...
 # Subtest: expiry during downtime preserves uncertainty instead of declaring an in-flight attempt cancelled
 ok 66 - expiry during downtime preserves uncertainty instead of declaring an in-flight attempt cancelled
   ---
-  duration_ms: 112.121015
+  duration_ms: 100.333253
   type: 'test'
   ...
 # Subtest: operation counter and ignored-event fingerprints survive restart
 ok 67 - operation counter and ignored-event fingerprints survive restart
   ---
-  duration_ms: 91.906638
+  duration_ms: 91.354855
   type: 'test'
   ...
 # Subtest: absent, empty, corrupt or non-file storage never opens as a new history
 ok 68 - absent, empty, corrupt or non-file storage never opens as a new history
   ---
-  duration_ms: 220.747199
+  duration_ms: 175.886157
   type: 'test'
   ...
 # Subtest: initialization is explicit and cannot overwrite an existing history
 ok 69 - initialization is explicit and cannot overwrite an existing history
   ---
-  duration_ms: 154.900517
+  duration_ms: 144.151806
   type: 'test'
   ...
 # Subtest: invalid saved history (checksum) fails closed rather than resetting counters or rules
 ok 70 - invalid saved history (checksum) fails closed rather than resetting counters or rules
   ---
-  duration_ms: 117.098075
+  duration_ms: 98.424432
   type: 'test'
   ...
 # Subtest: invalid saved history (version) fails closed rather than resetting counters or rules
 ok 71 - invalid saved history (version) fails closed rather than resetting counters or rules
   ---
-  duration_ms: 150.604305
+  duration_ms: 89.586952
   type: 'test'
   ...
 # Subtest: invalid saved history (counter) fails closed rather than resetting counters or rules
 ok 72 - invalid saved history (counter) fails closed rather than resetting counters or rules
   ---
-  duration_ms: 134.266468
+  duration_ms: 96.296526
   type: 'test'
   ...
 # Subtest: invalid saved history (missing-row) fails closed rather than resetting counters or rules
 ok 73 - invalid saved history (missing-row) fails closed rather than resetting counters or rules
   ---
-  duration_ms: 114.36009
+  duration_ms: 96.625323
   type: 'test'
   ...
 # Subtest: failed snapshot write does not acknowledge enable and poisons the running engine
 ok 74 - failed snapshot write does not acknowledge enable and poisons the running engine
   ---
-  duration_ms: 163.40658
+  duration_ms: 149.290859
   type: 'test'
   ...
 # Subtest: a failed submitted snapshot cannot acknowledge or silently retry an execution
 ok 75 - a failed submitted snapshot cannot acknowledge or silently retry an execution
   ---
-  duration_ms: 149.345445
+  duration_ms: 156.834123
   type: 'test'
   ...
 # Subtest: a failed succeeded snapshot cannot acknowledge or silently retry an execution
 ok 76 - a failed succeeded snapshot cannot acknowledge or silently retry an execution
   ---
-  duration_ms: 140.904274
+  duration_ms: 203.995818
   type: 'test'
   ...
 # Subtest: eligibility is checked after durable dispatch recording when time advances by 101ms
 ok 77 - eligibility is checked after durable dispatch recording when time advances by 101ms
   ---
-  duration_ms: 53.206957
+  duration_ms: 90.999706
   type: 'test'
   ...
 # Subtest: eligibility is checked after durable dispatch recording when time advances by 1000ms
 ok 78 - eligibility is checked after durable dispatch recording when time advances by 1000ms
   ---
-  duration_ms: 52.602352
+  duration_ms: 63.616692
   type: 'test'
   ...
 # Subtest: replacing an open storage file stops the engine before a handoff
 ok 79 - replacing an open storage file stops the engine before a handoff
   ---
-  duration_ms: 3.702333
+  duration_ms: 2.305438
   type: 'test'
   ...
 # Subtest: a second live process cannot open the store; SIGKILL releases the OS lock for recovery
 ok 80 - a second live process cannot open the store; SIGKILL releases the OS lock for recovery
   ---
-  duration_ms: 151.424278
+  duration_ms: 153.818779
+  type: 'test'
+  ...
+# Subtest: exact arithmetic: TEST 1000 / 100 = 10; 110 => +100/+10%; 90 => -100/-10%; thirds stay rational
+ok 81 - exact arithmetic: TEST 1000 / 100 = 10; 110 => +100/+10%; 90 => -100/-10%; thirds stay rational
+  ---
+  duration_ms: 1.746035
+  type: 'test'
+  ...
+# Subtest: entry requires a new qualifying observation; cannot close on entry, reopen rule, switch source or create second position
+ok 82 - entry requires a new qualifying observation; cannot close on entry, reopen rule, switch source or create second position
+  ---
+  duration_ms: 36.073544
+  type: 'test'
+  ...
+# Subtest: take_profit: observed 110, not threshold; saved result and next cycle preserve history
+ok 83 - take_profit: observed 110, not threshold; saved result and next cycle preserve history
+  ---
+  duration_ms: 18.145201
+  type: 'test'
+  ...
+# Subtest: stop_loss: observed 90, not threshold; saved result and next cycle preserve history
+ok 84 - stop_loss: observed 90, not threshold; saved result and next cycle preserve history
+  ---
+  duration_ms: 16.124658
+  type: 'test'
+  ...
+# Subtest: take_profit: observed 125, not threshold; saved result and next cycle preserve history
+ok 85 - take_profit: observed 125, not threshold; saved result and next cycle preserve history
+  ---
+  duration_ms: 11.555357
+  type: 'test'
+  ...
+# Subtest: stop_loss: observed 75, not threshold; saved result and next cycle preserve history
+ok 86 - stop_loss: observed 75, not threshold; saved result and next cycle preserve history
+  ---
+  duration_ms: 14.40015
+  type: 'test'
+  ...
+# Subtest: manual request is durable/idempotent and cannot close from cached price; restart waits for a new snapshot
+ok 87 - manual request is durable/idempotent and cannot close from cached price; restart waits for a new snapshot
+  ---
+  duration_ms: 10.484421
+  type: 'test'
+  ...
+# Subtest: entry expiry does not expire position; outage and stale responses cannot value/close; recovery uses observed new price
+ok 88 - entry expiry does not expire position; outage and stale responses cannot value/close; recovery uses observed new price
+  ---
+  duration_ms: 11.127862
+  type: 'test'
+  ...
+# Subtest: expired waiting rule cannot enter; invalid percentages are rejected
+ok 89 - expired waiting rule cannot enter; invalid percentages are rejected
+  ---
+  duration_ms: 3.842218
+  type: 'test'
+  ...
+# Subtest: SIGKILL before_result_commit: separate process restores entry and position consistently, unknown cannot retry
+ok 90 - SIGKILL before_result_commit: separate process restores entry and position consistently, unknown cannot retry
+  ---
+  duration_ms: 164.97353
+  type: 'test'
+  ...
+# Subtest: SIGKILL after_result_commit: separate process restores entry and position consistently, unknown cannot retry
+ok 91 - SIGKILL after_result_commit: separate process restores entry and position consistently, unknown cannot retry
+  ---
+  duration_ms: 134.414486
+  type: 'test'
+  ...
+# Subtest: SIGKILL before_position_commit: exit and observation atomic; separate-process replay does not duplicate exit
+ok 92 - SIGKILL before_position_commit: exit and observation atomic; separate-process replay does not duplicate exit
+  ---
+  duration_ms: 242.441774
+  type: 'test'
+  ...
+# Subtest: SIGKILL inside_position_transaction: exit and observation atomic; separate-process replay does not duplicate exit
+ok 93 - SIGKILL inside_position_transaction: exit and observation atomic; separate-process replay does not duplicate exit
+  ---
+  duration_ms: 212.294163
+  type: 'test'
+  ...
+# Subtest: SIGKILL after_position_commit: exit and observation atomic; separate-process replay does not duplicate exit
+ok 94 - SIGKILL after_position_commit: exit and observation atomic; separate-process replay does not duplicate exit
+  ---
+  duration_ms: 212.937783
+  type: 'test'
+  ...
+# Subtest: replay of entry, stale/future/out-of-order observations and other pool/mint cannot exit
+ok 95 - replay of entry, stale/future/out-of-order observations and other pool/mint cannot exit
+  ---
+  duration_ms: 299.354402
+  type: 'test'
+  ...
+# Subtest: v3 SQLite migrates losslessly without converting legacy rules into positions
+ok 96 - v3 SQLite migrates losslessly without converting legacy rules into positions
+  ---
+  duration_ms: 5.893233
+  type: 'test'
+  ...
+# Subtest: explicit condition-only scenario never creates a position, even with TP/SL form values present
+ok 97 - explicit condition-only scenario never creates a position, even with TP/SL form values present
+  ---
+  duration_ms: 4.926204
+  type: 'test'
+  ...
+# Subtest: open position loses valuation when observations age out without a new successful poll
+ok 98 - open position loses valuation when observations age out without a new successful poll
+  ---
+  duration_ms: 3.734095
   type: 'test'
   ...
 # Subtest: invalid rule parameters cannot create an executable rule
-ok 81 - invalid rule parameters cannot create an executable rule
+ok 99 - invalid rule parameters cannot create an executable rule
   ---
-  duration_ms: 2.854657
+  duration_ms: 3.233219
   type: 'test'
   ...
 # Subtest: draft and unmet condition do not submit; matching event executes the fixed demo intent
-ok 82 - draft and unmet condition do not submit; matching event executes the fixed demo intent
+ok 100 - draft and unmet condition do not submit; matching event executes the fixed demo intent
   ---
-  duration_ms: 2.881457
+  duration_ms: 2.088872
   type: 'test'
   ...
 # Subtest: duplicate creation and commands are idempotent; request ID reuse with different content is rejected
-ok 83 - duplicate creation and commands are idempotent; request ID reuse with different content is rejected
+ok 101 - duplicate creation and commands are idempotent; request ID reuse with different content is rejected
   ---
-  duration_ms: 0.706884
+  duration_ms: 0.531863
   type: 'test'
   ...
 # Subtest: duplicate event delivery and competing matching events reserve one operation
-ok 84 - duplicate event delivery and competing matching events reserve one operation
+ok 102 - duplicate event delivery and competing matching events reserve one operation
   ---
-  duration_ms: 0.633313
+  duration_ms: 0.3914
   type: 'test'
   ...
 # Subtest: reusing an event ID with changed data is rejected
-ok 85 - reusing an event ID with changed data is rejected
+ok 103 - reusing an event ID with changed data is rejected
   ---
-  duration_ms: 0.365731
+  duration_ms: 0.356979
   type: 'test'
   ...
 # Subtest: parallel execution requests with same or distinct request IDs share one in-flight operation
-ok 86 - parallel execution requests with same or distinct request IDs share one in-flight operation
+ok 104 - parallel execution requests with same or distinct request IDs share one in-flight operation
   ---
-  duration_ms: 0.515406
+  duration_ms: 0.699295
   type: 'test'
   ...
 # Subtest: wrong asset, stale and future events are ignored without invoking simulator
-ok 87 - wrong asset, stale and future events are ignored without invoking simulator
+ok 105 - wrong asset, stale and future events are ignored without invoking simulator
   ---
-  duration_ms: 0.320122
+  duration_ms: 0.382217
   type: 'test'
   ...
 # Subtest: freshness is checked again immediately before handoff; only a new fresh event can prepare again
-ok 88 - freshness is checked again immediately before handoff; only a new fresh event can prepare again
+ok 106 - freshness is checked again immediately before handoff; only a new fresh event can prepare again
   ---
-  duration_ms: 0.36563
+  duration_ms: 0.481597
   type: 'test'
   ...
 # Subtest: enabled rule processes a synthetic event end to end, including duplicate simultaneous deliveries
-ok 89 - enabled rule processes a synthetic event end to end, including duplicate simultaneous deliveries
+ok 107 - enabled rule processes a synthetic event end to end, including duplicate simultaneous deliveries
   ---
-  duration_ms: 0.660675
+  duration_ms: 0.803232
   type: 'test'
   ...
 # Subtest: pause between preparation and handoff blocks the queued operation
-ok 90 - pause between preparation and handoff blocks the queued operation
+ok 108 - pause between preparation and handoff blocks the queued operation
   ---
-  duration_ms: 0.783249
+  duration_ms: 0.959788
   type: 'test'
   ...
 # Subtest: revoke between preparation and handoff blocks the queued operation
-ok 91 - revoke between preparation and handoff blocks the queued operation
+ok 109 - revoke between preparation and handoff blocks the queued operation
   ---
-  duration_ms: 0.301794
+  duration_ms: 0.393363
   type: 'test'
   ...
 # Subtest: expire between preparation and handoff blocks the queued operation
-ok 92 - expire between preparation and handoff blocks the queued operation
+ok 110 - expire between preparation and handoff blocks the queued operation
   ---
-  duration_ms: 0.573223
+  duration_ms: 0.300193
   type: 'test'
   ...
 # Subtest: resume after pause requires a new event and cannot replay a cancelled operation
-ok 93 - resume after pause requires a new event and cannot replay a cancelled operation
+ok 111 - resume after pause requires a new event and cannot replay a cancelled operation
   ---
-  duration_ms: 0.261043
+  duration_ms: 0.468907
   type: 'test'
   ...
 # Subtest: pause after handoff does not pretend the operation was cancelled
-ok 94 - pause after handoff does not pretend the operation was cancelled
+ok 112 - pause after handoff does not pretend the operation was cancelled
   ---
-  duration_ms: 0.269115
+  duration_ms: 0.394446
   type: 'test'
   ...
 # Subtest: revoke after handoff does not pretend the operation was cancelled
-ok 95 - revoke after handoff does not pretend the operation was cancelled
+ok 113 - revoke after handoff does not pretend the operation was cancelled
   ---
-  duration_ms: 0.33185
+  duration_ms: 0.289116
   type: 'test'
   ...
 # Subtest: expire after handoff does not pretend the operation was cancelled
-ok 96 - expire after handoff does not pretend the operation was cancelled
+ok 114 - expire after handoff does not pretend the operation was cancelled
   ---
-  duration_ms: 0.261474
+  duration_ms: 0.270148
   type: 'test'
   ...
 # Subtest: expiry is enforced on the exact deadline without a background timer; revoke is permanent
-ok 97 - expiry is enforced on the exact deadline without a background timer; revoke is permanent
+ok 115 - expiry is enforced on the exact deadline without a background timer; revoke is permanent
   ---
-  duration_ms: 0.28608
+  duration_ms: 1.11711
   type: 'test'
   ...
 # Subtest: failed cannot automatically or manually resubmit the one-shot attempt
-ok 98 - failed cannot automatically or manually resubmit the one-shot attempt
+ok 116 - failed cannot automatically or manually resubmit the one-shot attempt
   ---
-  duration_ms: 0.652462
+  duration_ms: 0.343037
   type: 'test'
   ...
 # Subtest: unknown cannot automatically or manually resubmit the one-shot attempt
-ok 99 - unknown cannot automatically or manually resubmit the one-shot attempt
+ok 117 - unknown cannot automatically or manually resubmit the one-shot attempt
   ---
-  duration_ms: 0.221694
+  duration_ms: 0.26509
   type: 'test'
   ...
 # Subtest: throw cannot automatically or manually resubmit the one-shot attempt
-ok 100 - throw cannot automatically or manually resubmit the one-shot attempt
+ok 118 - throw cannot automatically or manually resubmit the one-shot attempt
   ---
-  duration_ms: 0.532361
+  duration_ms: 0.350118
   type: 'test'
   ...
 # Subtest: successful completion consumes the rule even with a new request ID and event
-ok 101 - successful completion consumes the rule even with a new request ID and event
+ok 119 - successful completion consumes the rule even with a new request ID and event
   ---
-  duration_ms: 0.233491
+  duration_ms: 4.9439
   type: 'test'
   ...
 # Subtest: simulation enforces amount, total spend, fees, min receipt and slippage using test units
-ok 102 - simulation enforces amount, total spend, fees, min receipt and slippage using test units
+ok 120 - simulation enforces amount, total spend, fees, min receipt and slippage using test units
   ---
-  duration_ms: 1.435651
+  duration_ms: 1.268584
   type: 'test'
   ...
 # Subtest: total spend ceiling is enforced even when the fee separately fits its ceiling
-ok 103 - total spend ceiling is enforced even when the fee separately fits its ceiling
+ok 121 - total spend ceiling is enforced even when the fee separately fits its ceiling
   ---
-  duration_ms: 0.35875
+  duration_ms: 0.271369
   type: 'test'
   ...
 # Subtest: late unknown result preserves permanent revocation and cannot trigger another purchase
-ok 104 - late unknown result preserves permanent revocation and cannot trigger another purchase
+ok 122 - late unknown result preserves permanent revocation and cannot trigger another purchase
   ---
-  duration_ms: 0.215354
+  duration_ms: 0.222075
   type: 'test'
   ...
 # Subtest: saved parameters cannot be changed through caller objects or returned snapshots
-ok 105 - saved parameters cannot be changed through caller objects or returned snapshots
+ok 123 - saved parameters cannot be changed through caller objects or returned snapshots
   ---
-  duration_ms: 0.571981
+  duration_ms: 0.359403
   type: 'test'
   ...
 # Subtest: live mode and non-simulator adapters are unavailable
-ok 106 - live mode and non-simulator adapters are unavailable
+ok 124 - live mode and non-simulator adapters are unavailable
   ---
-  duration_ms: 0.149666
+  duration_ms: 0.293113
   type: 'test'
   ...
 # Subtest: automatic reconnect resumes from committed position without enabling a paused rule
-ok 107 - automatic reconnect resumes from committed position without enabling a paused rule
+ok 125 - automatic reconnect resumes from committed position without enabling a paused rule
   ---
-  duration_ms: 4.521005
+  duration_ms: 4.672608
   type: 'test'
   ...
 # Subtest: replayed delivery has a new receipt time but retains identity and cannot purchase twice
-ok 108 - replayed delivery has a new receipt time but retains identity and cannot purchase twice
+ok 126 - replayed delivery has a new receipt time but retains identity and cannot purchase twice
   ---
-  duration_ms: 1.206816
+  duration_ms: 1.081472
   type: 'test'
   ...
 # Subtest: stale, foreign-asset, foreign-quote and different-scale values cannot trigger the rule
-ok 109 - stale, foreign-asset, foreign-quote and different-scale values cannot trigger the rule
+ok 127 - stale, foreign-asset, foreign-quote and different-scale values cannot trigger the rule
   ---
-  duration_ms: 1.764536
+  duration_ms: 1.749489
   type: 'test'
   ...
 # Subtest: future data is ignored without poisoning the timestamp high-water mark
-ok 110 - future data is ignored without poisoning the timestamp high-water mark
+ok 128 - future data is ignored without poisoning the timestamp high-water mark
   ---
-  duration_ms: 0.504679
+  duration_ms: 0.553465
   type: 'test'
   ...
 # Subtest: contiguous positions with older occurrence time are durably ignored, not sorted into a purchase
-ok 111 - contiguous positions with older occurrence time are durably ignored, not sorted into a purchase
+ok 129 - contiguous positions with older occurrence time are durably ignored, not sorted into a purchase
   ---
-  duration_ms: 1.131764
+  duration_ms: 0.869261
   type: 'test'
   ...
 # Subtest: a forward position gap latches decision_required and later delivery cannot silently repair it
-ok 112 - a forward position gap latches decision_required and later delivery cannot silently repair it
+ok 130 - a forward position gap latches decision_required and later delivery cannot silently repair it
   ---
-  duration_ms: 1.221338
+  duration_ms: 1.300291
   type: 'test'
   ...
 # Subtest: source contract violation (changed-content) blocks execution without advancing cursor
-ok 113 - source contract violation (changed-content) blocks execution without advancing cursor
+ok 131 - source contract violation (changed-content) blocks execution without advancing cursor
   ---
-  duration_ms: 0.447103
+  duration_ms: 1.764471
   type: 'test'
   ...
 # Subtest: source contract violation (same-position-new-id) blocks execution without advancing cursor
-ok 114 - source contract violation (same-position-new-id) blocks execution without advancing cursor
+ok 132 - source contract violation (same-position-new-id) blocks execution without advancing cursor
   ---
-  duration_ms: 0.428595
+  duration_ms: 0.737863
   type: 'test'
   ...
 # Subtest: source contract violation (same-id-new-position) blocks execution without advancing cursor
-ok 115 - source contract violation (same-id-new-position) blocks execution without advancing cursor
+ok 133 - source contract violation (same-id-new-position) blocks execution without advancing cursor
   ---
-  duration_ms: 0.533893
+  duration_ms: 0.645945
   type: 'test'
   ...
 # Subtest: source contract violation (wrong-source) blocks execution without advancing cursor
-ok 116 - source contract violation (wrong-source) blocks execution without advancing cursor
+ok 134 - source contract violation (wrong-source) blocks execution without advancing cursor
   ---
-  duration_ms: 1.002999
+  duration_ms: 0.532373
   type: 'test'
   ...
 # Subtest: source contract violation (unknown-unit) blocks execution without advancing cursor
-ok 117 - source contract violation (unknown-unit) blocks execution without advancing cursor
+ok 135 - source contract violation (unknown-unit) blocks execution without advancing cursor
   ---
-  duration_ms: 0.264118
+  duration_ms: 0.368105
   type: 'test'
   ...
 # Subtest: history unavailable cancels unsubmitted intent and reconnect never clears the persisted latch
-ok 118 - history unavailable cancels unsubmitted intent and reconnect never clears the persisted latch
+ok 136 - history unavailable cancels unsubmitted intent and reconnect never clears the persisted latch
   ---
-  duration_ms: 0.679312
+  duration_ms: 3.157798
   type: 'test'
   ...
 # Subtest: unknown stays blocked while duplicates and fresh events continue to be recorded
-ok 119 - unknown stays blocked while duplicates and fresh events continue to be recorded
+ok 137 - unknown stays blocked while duplicates and fresh events continue to be recorded
   ---
-  duration_ms: 0.622436
+  duration_ms: 0.595809
   type: 'test'
   ...
 # Subtest: stream-bound rules require explicit price basis and cannot use the legacy event shortcut
-ok 120 - stream-bound rules require explicit price basis and cannot use the legacy event shortcut
+ok 138 - stream-bound rules require explicit price basis and cannot use the legacy event shortcut
   ---
-  duration_ms: 0.700004
+  duration_ms: 0.536009
   type: 'test'
   ...
 # Subtest: SIGKILL at after_source_receive: another process recovers a coherent cursor and replays without loss or duplication
-ok 121 - SIGKILL at after_source_receive: another process recovers a coherent cursor and replays without loss or duplication
+ok 139 - SIGKILL at after_source_receive: another process recovers a coherent cursor and replays without loss or duplication
   ---
-  duration_ms: 303.774537
+  duration_ms: 259.086073
   type: 'test'
   ...
 # Subtest: SIGKILL at before_source_commit: another process recovers a coherent cursor and replays without loss or duplication
-ok 122 - SIGKILL at before_source_commit: another process recovers a coherent cursor and replays without loss or duplication
+ok 140 - SIGKILL at before_source_commit: another process recovers a coherent cursor and replays without loss or duplication
   ---
-  duration_ms: 283.324521
+  duration_ms: 213.028048
   type: 'test'
   ...
 # Subtest: SIGKILL at after_source_commit: another process recovers a coherent cursor and replays without loss or duplication
-ok 123 - SIGKILL at after_source_commit: another process recovers a coherent cursor and replays without loss or duplication
+ok 141 - SIGKILL at after_source_commit: another process recovers a coherent cursor and replays without loss or duplication
   ---
-  duration_ms: 246.227457
+  duration_ms: 284.951264
   type: 'test'
   ...
 # Subtest: restart replays unknown operations without clearing their block or resubmitting
-ok 124 - restart replays unknown operations without clearing their block or resubmitting
+ok 142 - restart replays unknown operations without clearing their block or resubmitting
   ---
-  duration_ms: 95.144767
+  duration_ms: 103.996151
   type: 'test'
   ...
 # Subtest: history-loss decision survives process restart even when a later source offers the full log
-ok 125 - history-loss decision survives process restart even when a later source offers the full log
+ok 143 - history-loss decision survives process restart even when a later source offers the full log
   ---
-  duration_ms: 147.593728
+  duration_ms: 145.584129
   type: 'test'
   ...
 # Subtest: a failed source snapshot saves neither cursor nor intent, and blocks this engine
-ok 126 - a failed source snapshot saves neither cursor nor intent, and blocks this engine
+ok 144 - a failed source snapshot saves neither cursor nor intent, and blocks this engine
   ---
-  duration_ms: 170.809423
+  duration_ms: 173.091326
   type: 'test'
   ...
 # Subtest: v1 SQLite history is upgraded without losing rules, command identity or an existing outcome
-ok 127 - v1 SQLite history is upgraded without losing rules, command identity or an existing outcome
+ok 145 - v1 SQLite history is upgraded without losing rules, command identity or an existing outcome
   ---
-  duration_ms: 109.737372
+  duration_ms: 99.572569
   type: 'test'
   ...
 # Subtest: occurrence-time ordering survives restart and an older new event cannot trigger a purchase
-ok 128 - occurrence-time ordering survives restart and an older new event cannot trigger a purchase
+ok 146 - occurrence-time ordering survives restart and an older new event cannot trigger a purchase
   ---
-  duration_ms: 153.167984
+  duration_ms: 137.309963
   type: 'test'
   ...
 # Subtest: HTTP scenario creates, enables, receives prices, executes once and restores from SQLite in a new server process
-ok 129 - HTTP scenario creates, enables, receives prices, executes once and restores from SQLite in a new server process
+ok 147 - HTTP scenario creates, enables, receives prices, executes once and restores from SQLite in a new server process
   ---
-  duration_ms: 263.23074
+  duration_ms: 283.257729
   type: 'test'
   ...
 # Subtest: unknown, stream decision and owner recovery stay independent through the HTTP layer and restart
-ok 130 - unknown, stream decision and owner recovery stay independent through the HTTP layer and restart
+ok 148 - unknown, stream decision and owner recovery stay independent through the HTTP layer and restart
   ---
-  duration_ms: 279.944889
+  duration_ms: 221.16379
   type: 'test'
   ...
 # Subtest: failure ends the attempt and a new explicit demo rule preserves the old history
-ok 131 - failure ends the attempt and a new explicit demo rule preserves the old history
+ok 149 - failure ends the attempt and a new explicit demo rule preserves the old history
   ---
-  duration_ms: 43.472515
+  duration_ms: 52.326361
   type: 'test'
   ...
 # Subtest: incident actions are tied to the displayed case and duplicate revocation keeps its command identity
-ok 132 - incident actions are tied to the displayed case and duplicate revocation keeps its command identity
+ok 150 - incident actions are tied to the displayed case and duplicate revocation keeps its command identity
   ---
-  duration_ms: 35.924364
+  duration_ms: 37.973635
   type: 'test'
   ...
 # Subtest: HTTP validation, conflicting request reuse and local-origin checks reject without creating work
-ok 133 - HTTP validation, conflicting request reuse and local-origin checks reject without creating work
+ok 151 - HTTP validation, conflicting request reuse and local-origin checks reject without creating work
   ---
-  duration_ms: 22.916524
+  duration_ms: 18.513747
   type: 'test'
   ...
 # Subtest: expiry uses core state and is restored; missing or damaged storage cannot become a fresh panel
-ok 134 - expiry uses core state and is restored; missing or damaged storage cannot become a fresh panel
+ok 152 - expiry uses core state and is restored; missing or damaged storage cannot become a fresh panel
   ---
-  duration_ms: 142.335223
+  duration_ms: 141.445586
   type: 'test'
   ...
-1..134
-# tests 134
+1..152
+# tests 152
 # suites 0
-# pass 134
+# pass 152
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 4633.084255
-npm notice
-npm notice New major version of npm available! 11.9.0 -> 12.2.1
-npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
-npm notice To update run: npm install -g npm@12.2.1
-npm notice
+# duration_ms 4575.59053

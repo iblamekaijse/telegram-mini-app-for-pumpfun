@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { startPanel } from '../web/server.mjs';
 const fixture = JSON.parse(readFileSync(new URL('../fixtures/dexscreener-pumpswap.json', import.meta.url)));
-let now = Date.now(), scenario = 'fixture', priceUsd = fixture[0].priceUsd, calls = 0;
+const initial = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+let now = initial.now ?? Date.now(), scenario = initial.scenario ?? 'fixture', priceUsd = initial.priceUsd ?? fixture[0].priceUsd, calls = 0;
 const app = await startPanel({ dataDir: process.argv[2], port: 0, clock: () => now, marketFetch: async () => {
   calls++;
   if (scenario === 'error') throw new Error('OFFLINE TEST transport failure');

@@ -32,6 +32,7 @@
           <p class="muted form-intro">Тестовые значения можно менять. Создание не включает правило.</p>
           <form id="create-form" novalidate>
             <label for="data-mode">Источник правила</label><select id="data-mode" name="mode"><option value="demo">Синтетический DEMO</option><option value="market-paper">Рыночные снимки · виртуально</option></select>
+            <label for="scenario">Сценарий</label><select id="scenario" name="scenario"><option value="condition-only">Разовое условие · без позиции</option><option value="virtual-position">Виртуальная позиция · вход и выход</option></select><small class="field-error" data-error="scenario"></small>
             <div id="synthetic-fields"><label for="asset">Тестовый актив</label>
             <select id="asset" name="assetId"><option value="DEMO:ASSET-A">DEMO:ASSET-A · актив A</option><option value="DEMO:ASSET-B">DEMO:ASSET-B · актив B</option></select><small class="field-error" data-error="assetId" id="asset-error"></small></div>
             <div id="market-fields" hidden><label for="mint">Mint-адрес Solana</label><input id="mint" name="mint" spellcheck="false" autocomplete="off" placeholder="Mint, а не название токена" aria-describedby="mint-error"><small class="field-error" data-error="mint" id="mint-error"></small><button id="find-token" class="button secondary" type="button">Загрузить токен</button><p class="help">Выбор: индексируемый пул PumpSwap токен/WSOL с наибольшей заявленной USD-ликвидностью. Затем пул закрепляется, автоматической подмены нет.</p></div>
@@ -39,12 +40,17 @@
               <div><label for="threshold">Цена не выше</label><div class="input-unit"><input id="threshold" name="threshold" inputmode="decimal" value="1.00" aria-describedby="threshold-help threshold-error" required><span>DEMO:QUOTE-A</span></div><small id="threshold-help" class="help">За 1 условную единицу актива</small><small class="field-error" data-error="threshold" id="threshold-error"></small></div>
               <div><label for="amount">Сумма покупки</label><div class="input-unit"><input id="amount" name="amount" inputmode="decimal" value="10.00" aria-describedby="amount-error" required><span>DEMO:QUOTE-A</span></div><small class="help">Условная валюта, не SOL и не USD</small><small class="field-error" data-error="amount" id="amount-error"></small></div>
             </div>
-            <label for="expiry">Срок действия</label><div class="input-unit expiry-input"><input type="number" id="expiry" name="expiresInMinutes" min="1" max="1440" step="1" value="10" aria-describedby="expiry-error" required><span>минут</span></div><small class="field-error" data-error="expiresInMinutes" id="expiry-error"></small>
+            <div id="position-fields" hidden><div class="field-grid">
+              <div><label for="take-profit">Тейк-профит, %</label><input id="take-profit" name="takeProfit" inputmode="decimal" placeholder="Ваш тестовый процент"><small class="field-error" data-error="takeProfit"></small></div>
+              <div><label for="stop-loss">Стоп-лосс, %</label><input id="stop-loss" name="stopLoss" inputmode="decimal" placeholder="Больше 0, меньше 100"><small class="field-error" data-error="stopLoss"></small></div>
+            </div><p class="help">От модельной цены входа. Это пользовательские условия, не рекомендация.</p></div>
+            <label for="expiry" id="expiry-label">Срок действия</label><div class="input-unit expiry-input"><input type="number" id="expiry" name="expiresInMinutes" min="1" max="1440" step="1" value="10" aria-describedby="expiry-error" required><span>минут</span></div><small class="field-error" data-error="expiresInMinutes" id="expiry-error"></small>
             <p class="help limits-note" id="form-limits">Ограничения имитации: комиссия до 0,01 DEMO:QUOTE-A; получение не меньше 1 условной единицы актива. Это не рыночная котировка.</p>
             <div class="form-actions"><button class="button primary" type="submit">Создать правило <span aria-hidden="true">→</span></button><button class="button secondary" type="button" id="cancel-create" hidden>Назад к правилу</button></div>
           </form>
         </section>
         <section class="card rule-card" id="rule-card" hidden aria-label="Текущее правило"></section>
+        <section class="card position-card" id="position-card" hidden aria-label="Виртуальная позиция"></section>
         <section class="card price-card" aria-label="Последняя цена"><div><p class="eyebrow">ПОСЛЕДНЯЯ ЦЕНА</p><div id="last-price" class="price-value">—</div><p id="price-unit" class="help">DEMO:QUOTE-A за 1 ед. актива</p></div><div id="price-time" class="price-time">Ожидаем первое<br>тестовое событие</div></section>
       </section>
       <aside class="card demo-console" id="demo-console" aria-labelledby="demo-title">
@@ -65,6 +71,8 @@
       </aside>
     </div>
     <section class="card journal" aria-labelledby="journal-title"><div class="card-heading"><div><p class="eyebrow">СОХРАНЁННАЯ ИСТОРИЯ</p><h2 id="journal-title">События и операции</h2></div><span class="soft-tag" id="journal-count">0 записей</span></div><div id="journal-list"><div class="empty-log"><span aria-hidden="true">≋</span><p>История начнётся с первого правила</p><small>События и результаты останутся здесь после перезапуска.</small></div></div><details id="archive" hidden><summary>Предыдущие правила</summary><div id="archive-list"></div></details></section>
+    <section class="card" id="position-history" hidden><h2>Завершённые виртуальные позиции</h2><div id="position-history-list"></div></section>
+    <section class="card" id="telegram-card" aria-labelledby="telegram-title"><h2 id="telegram-title">Telegram · виртуальный режим</h2><p id="telegram-status" role="status">Проверка подключения…</p><p class="help">Один владелец, только личный чат. Бот работает, пока запущен локальный сервер. Без Telegram панель и рыночный цикл продолжают работать.</p><div class="form-actions"><button type="button" class="button secondary" id="telegram-code">Получить код привязки</button><button type="button" class="button danger" id="telegram-unlink">Отключить привязку</button></div><p id="telegram-link" class="help" role="status"></p></section>
     <footer><span>Локальный доверенный DEMO-доступ · без настоящей авторизации</span><span>Состояние хранится в SQLite</span></footer>
   </main>
   <dialog id="revoke-dialog"><div class="dialog-inner"><span class="eyebrow">ОКОНЧАТЕЛЬНЫЙ ОТЗЫВ</span><h2>Отозвать правило?</h2><p>Включить его снова будет нельзя. История сохранится. Уже переданная операция и её неизвестный исход не отменяются.</p><div class="form-actions"><button class="button danger" id="confirm-revoke" type="button">Окончательно отозвать</button><button class="button secondary" id="cancel-revoke" type="button">Оставить правило</button></div></div></dialog>

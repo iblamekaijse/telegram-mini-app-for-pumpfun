@@ -1,15 +1,21 @@
 {
   "name": "demo-rule-lifecycle",
-  "version": "0.0.0",
+  "version": "0.1.0-paper.1",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.19" },
+  "engines": {
+    "node": ">=24.19"
+  },
   "scripts": {
-    "start": "node --use-env-proxy web/server.mjs",
+    "start": "node ops/start.mjs",
     "demo": "node demo.mjs",
     "demo:restart": "node restart-demo.mjs",
     "demo:source": "node source-demo.mjs",
     "demo:owner": "node owner-demo.mjs",
-    "test": "node --test --test-reporter=tap rule-engine.test.mjs persistence.test.mjs source.test.mjs owner-decisions.test.mjs web.test.mjs market.test.mjs market-reselection.test.mjs"
+    "test": "node --test --test-reporter=tap rule-engine.test.mjs persistence.test.mjs source.test.mjs owner-decisions.test.mjs web.test.mjs market.test.mjs market-reselection.test.mjs positions.test.mjs telegram.test.mjs telegram-dialog.test.mjs local-ops.test.mjs",
+    "setup": "node --use-env-proxy ops/cli.mjs setup",
+    "doctor": "node --use-env-proxy ops/cli.mjs doctor",
+    "backup": "node --use-env-proxy ops/cli.mjs backup",
+    "restore": "node --use-env-proxy ops/cli.mjs restore"
   }
 }

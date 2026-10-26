@@ -14,6 +14,10 @@ let feedbackRuleId = null;
 let marketFormError = null;
 let revokeTarget;
 const pendingKeys = new Map();
+const openPosition = () => model?.positions?.find(p => p.status !== 'closed');
+const positionFor = rule => model?.positions?.find(p => p.ruleId === rule?.config.id);
+const exitLabels = { take_profit: 'Тейк-профит', stop_loss: 'Стоп-лосс', user_request: 'По запросу пользователя' };
+const displayDecimal = value => String(value).replace('.', ',');
 const current = () => model?.rules.find(rule => rule.config.id === model.currentRuleId);
 const isMarket = rule => !!rule?.config.market;
 const formatFor = (rule, units) => {
@@ -23,7 +27,7 @@ const formatFor = (rule, units) => {
 };
 const quoteFor = rule => isMarket(rule) ? 'USD' : quote;
 const terminal = rule => ['finished', 'expired', 'revoked'].includes(rule.state);
-const operationLabel = (rule, operation) => isMarket(rule) && operation.status === 'succeeded' ? 'Виртуальное условие выполнено' : labels[operation.status];
+const operationLabel = (rule, operation) => isMarket(rule) && operation.status === 'succeeded' ? rule.config.position ? 'Виртуальный вход сохранён' : 'Виртуальное условие выполнено' : labels[operation.status];
 const pill = (status, label = labels[status] ?? status) => `<span class="state-pill ${escape(status)}">${escape(label)}</span>`;
 const date = value => new Date(value).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const time = value => new Date(value).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -33,6 +37,13 @@ function renderMarketRuleStatus() {
   if (!isMarket(rule) || creating) {
     if (feedbackRuleId !== null) feedback('');
     return false;
+  }
+  const position = positionFor(rule);
+  if (position) {
+    feedback(position.status === 'closed' ? `Виртуальная позиция закрыта. ${exitLabels[position.exit.reason]}. Результат сохранён.`
+      : position.status === 'close_requested' ? 'Запрос закрытия сохранён. Ожидаем следующий новый пригодный снимок.'
+      : 'Виртуальная позиция открыта. Входное правило завершено; наблюдаем новые снимки для выхода.');
+    feedbackRuleId = rule.config.id; return true;
   }
   const operation = rule.operations.at(-1);
   const result = operation?.status === 'succeeded' ? 'Виртуальное условие выполнено. Условие подтверждено на полученной цене; покупка не проводилась.'
@@ -55,10 +66,12 @@ function updateControls() {
   document.querySelectorAll('button[data-action], #create-form button[type=submit]').forEach(button => { button.disabled = busy || !connected; });
   $('send-price').disabled = busy || !connected || !rule || isMarket(rule) || rule.stream.continuity !== 'continuous' || terminal(rule);
   $('interrupt-stream').disabled = busy || !connected || !rule || isMarket(rule) || rule.stream.continuity !== 'continuous' || terminal(rule);
-  $('find-token').disabled = busy || !connected;
+  $('find-token').disabled = busy || !connected || !!openPosition();
+  if ($('close-position')) $('close-position').disabled = busy || !connected || !openPosition() || openPosition().status === 'close_requested';
   $('confirm-revoke').disabled = busy || !connected;
   $('create-form').querySelector('button[type=submit]').setAttribute('aria-busy', String(busy));
   $('send-price').setAttribute('aria-busy', String(busy));
+  renderTelegram();
   $('connection-text').textContent = connected ? 'Сохранено локально' : 'Нет связи с сервером';
   $('connection-dot').classList.toggle('offline', !connected);
   if (!connected && !$('market-card').hidden) $('market-status').textContent = 'Нет связи с панелью';
@@ -68,6 +81,11 @@ function updateControls() {
 }
 function formMode() {
   const marketMode = $('data-mode').value === 'market-paper';
+  $('scenario').querySelector('[value=virtual-position]').disabled = !marketMode;
+  if (!marketMode) $('scenario').value = 'condition-only';
+  const positionMode = marketMode && $('scenario').value === 'virtual-position';
+  $('position-fields').hidden = !positionMode;
+  $('expiry-label').textContent = positionMode ? 'Срок ожидания входа' : 'Срок действия';
   $('synthetic-fields').hidden = marketMode;
   $('market-fields').hidden = !marketMode;
   $('threshold').parentElement.querySelector('span').textContent = marketMode ? 'USD / токен' : quote;
@@ -76,6 +94,10 @@ function formMode() {
   $('threshold-help').textContent = marketMode ? 'До 9 знаков после запятой. Условие проверяется только на новых полученных снимках.' : 'За 1 условную единицу актива';
   $('amount').closest('div').parentElement.querySelector('.help').textContent = marketMode ? 'Виртуальная сумма, без расчёта количества токенов и цены исполнения' : 'Условная валюта, не SOL и не USD';
   $('form-limits').textContent = marketMode ? 'Подтверждается только условие на полученном priceUsd. Покупка, комиссия, min-out и доходность не рассчитываются. Пропущенные движения не восстанавливаются.' : 'Ограничения имитации: комиссия до 0,01 DEMO:QUOTE-A; получение не меньше 1 условной единицы актива. Это не рыночная котировка.';
+  if (positionMode) {
+    $('amount').closest('div').parentElement.querySelector('.help').textContent = 'Тестовая сумма USD для расчётной модели позиции';
+    $('form-limits').textContent = 'Вход и выход рассчитываются по новым снимкам закреплённого пула. Без исполнения, комиссий и проскальзывания. Срок ограничивает только ожидание входа.';
+  }
   $('demo-console').hidden = marketMode || isMarket(current()) && !creating;
   document.querySelector('.workspace').classList.toggle('market-mode', $('demo-console').hidden);
 }
@@ -86,7 +108,7 @@ function renderMarket() {
   const statuses = { idle: 'Ожидаем mint', waiting: 'Ожидаем времени опроса', loading: 'Загрузка…', fresh: 'Снимок получен', stale: 'Наблюдение устарело', error: 'Ошибка · повторим опрос', no_data: 'Нет поддерживаемых данных' };
   $('market-status').textContent = statuses[s.status] ?? s.status;
   $('market-status').className = `state-pill ${s.status === 'fresh' ? 'active' : s.status === 'idle' ? '' : 'unknown'}`;
-  $('market-availability').textContent = s.snapshotUsable ? 'Имеющийся снимок пригоден для формы нового правила.'
+  $('market-availability').textContent = s.snapshotUsable ? openPosition() ? 'Снимок пригоден для наблюдения позиции. Источник и пул закреплены до закрытия.' : 'Имеющийся снимок пригоден для формы нового правила.'
     : 'Пригодного снимка для нового правила пока нет. Дождитесь свежих данных выбранного mint и пула.';
   const b = s.binding;
   $('market-info').innerHTML = s.mint ? `<p><strong>${escape(s.token?.name || 'Токен')}${s.token?.symbol ? ` · ${escape(s.token.symbol)}` : ''}</strong></p><p>Mint: <code>${escape(s.mint)}</code></p>${b ? `<p>Источник: DEX Screener · площадка: PumpSwap (по данным индекса)</p><p>Пул: <code>${escape(b.pairAddress)}</code></p><p>Пара: <code>${escape(b.mint)}</code> / WSOL <code>${escape(b.quoteMint)}</code></p><p>Котировка условия: USD за токен (priceUsd), оценка агрегатора, не WSOL и не цена исполнения.</p>` : ''}` : '<p class="muted">Введите mint в форме и нажмите «Загрузить токен».</p>';
@@ -145,19 +167,20 @@ function renderRule(rule) {
   if (['draft', 'paused'].includes(rule.state) && !rule.submittedOperationId && (marketRule || rule.stream.continuity === 'continuous')) buttons += '<button class="button primary" data-action="enable" type="button">Включить правило →</button>';
   if (rule.state === 'active') buttons += '<button class="button secondary" data-action="pause" type="button">Приостановить</button>';
   if (!terminal(rule)) buttons += '<button class="button danger-outline" data-action="revoke" type="button">Отозвать правило</button>';
-  if (terminal(rule)) buttons += `<button class="button primary" data-action="new" type="button">${marketRule ? 'Новое правило' : 'Новое DEMO-правило'} →</button>`;
+  if (terminal(rule) && !openPosition()) buttons += `<button class="button primary" data-action="new" type="button">${marketRule ? 'Новое правило' : 'Новое DEMO-правило'} →</button>`;
   $('rule-card').innerHTML = `<div class="card-heading"><div><p class="eyebrow">${marketRule ? 'РЫНОЧНЫЕ СНИМКИ · ВИРТУАЛЬНО' : 'СИНТЕТИЧЕСКАЯ РАЗОВАЯ ПОКУПКА'}</p><h2>Ваше правило</h2></div>${pill(rule.state)}</div>
+    ${config.position ? `<p class="help">Сценарий: виртуальная позиция. Тейк-профит ${displayDecimal(config.position.takeProfitBps / 100)}%, стоп-лосс ${displayDecimal(config.position.stopLossBps / 100)}%. Срок ограничивает ожидание входа; завершение входного правила не закрывает позицию.</p>` : ''}
     <div class="rule-asset"><span class="asset-mark" aria-hidden="true">${escape(config.assetId.slice(-1))}</span>${escape(config.assetId)}</div>
     <div class="rule-grid"><div><p class="label">Цена не выше</p><p class="value">${money(config.condition.thresholdUnits)}<small>${quote} за 1 ед. актива</small></p></div>
     <div><p class="label">${marketRule ? 'Виртуальная сумма' : 'Сумма покупки'}</p><p class="value">${money(config.amountUnits)}<small>${quote}</small></p></div>
-    <div><p class="label">Действует до</p><p class="value">${date(config.expiresAtMs)}<small>По местному времени браузера</small></p></div>
-    <div><p class="label">Результат операции</p><p class="value" id="operation-result">${last ? escape(operationLabel(rule, last)) : 'Ещё нет операции'}<small>${marketRule ? last?.status === 'succeeded' ? 'Только проверка условия на полученной цене; покупка не проводилась' : 'Отдельно от состояния правила; реальные сделки не выполняются' : last ? 'Отдельно от состояния правила' : 'Покупка пока не передавалась имитатору'}</small></p></div></div>
-    ${notice}<div class="rule-actions">${buttons}</div>${marketRule ? `<p class="help">Источник закреплён: DEX Screener, PumpSwap, пул <code>${escape(config.market.pairAddress)}</code>. Виртуальная сумма — параметр правила; цена исполнения неизвестна. Нет расчёта исполнения, получения токенов или доходности. Возраст локального наблюдения ≤ 45 с, возраст цены агрегатора неизвестен.</p>` : `<details class="rule-detail"><summary>Ограничения имитации</summary><p>Общий расход ≤ ${money(config.limits.maxTotalSpendUnits)} ${quote}; комиссия ≤ ${money(config.limits.maxFeeUnits)} ${quote}; получение ≥ ${config.limits.minReceiveUnits} услов. ед. актива. Возраст события ≤ ${config.limits.maxEventAgeMs / 1000} с. Проверки локальные, не блокчейн.</p></details>`}`;
+    <div><p class="label">${config.position ? 'Ожидание входа до' : 'Действует до'}</p><p class="value">${date(config.expiresAtMs)}<small>По местному времени браузера</small></p></div>
+    <div><p class="label">Результат операции</p><p class="value" id="operation-result">${last ? escape(operationLabel(rule, last)) : 'Ещё нет операции'}<small>${marketRule ? last?.status === 'succeeded' ? config.position ? 'Модельный вход сохранён отдельно от состояния позиции; реальной покупки нет' : 'Только проверка условия на полученной цене; покупка не проводилась' : 'Отдельно от состояния правила; реальные сделки не выполняются' : last ? 'Отдельно от состояния правила' : 'Покупка пока не передавалась имитатору'}</small></p></div></div>
+    ${notice}<div class="rule-actions">${buttons}</div>${marketRule ? `<p class="help">Источник закреплён: DEX Screener, PumpSwap, пул <code>${escape(config.market.pairAddress)}</code>. ${config.position ? 'Расчётная позиция показана отдельно; реальное исполнение и onchain-баланс не моделируются.' : 'Виртуальная сумма — параметр правила; цена исполнения неизвестна. Нет расчёта исполнения, получения токенов или доходности.'} Возраст локального наблюдения ≤ 45 с, возраст цены агрегатора неизвестен.</p>` : `<details class="rule-detail"><summary>Ограничения имитации</summary><p>Общий расход ≤ ${money(config.limits.maxTotalSpendUnits)} ${quote}; комиссия ≤ ${money(config.limits.maxFeeUnits)} ${quote}; получение ≥ ${config.limits.minReceiveUnits} услов. ед. актива. Возраст события ≤ ${config.limits.maxEventAgeMs / 1000} с. Проверки локальные, не блокчейн.</p></details>`}`;
   const lastEvent = rule.events.filter(entry => entry.sourceRecord).at(-1);
-  const observed = marketRule ? rule.events.filter(e => e.marketSnapshot).at(-1)?.marketSnapshot : null;
+  const observed = marketRule ? positionFor(rule)?.last ?? rule.events.filter(e => e.marketSnapshot).at(-1)?.marketSnapshot : null;
   $('last-price').textContent = marketRule ? observed?.rawPriceUsd ?? '—' : lastEvent ? money(lastEvent.sourceRecord.payload.priceUnits) : '—';
   $('price-unit').textContent = `${quote} за 1 ед. ${config.assetId}`;
-  $('price-time').innerHTML = marketRule ? observed ? `<strong>Получено ${time(observed.receivedAtMs)}</strong>Время цены неизвестно${model.now - observed.observedAtMs > 45_000 ? '<br>Локальное наблюдение устарело' : ''}` : 'Ожидаем новый<br>рыночный снимок' : lastEvent ? `<strong>Получено ${time(lastEvent.result.receivedAtMs)}</strong>Возникло ${time(lastEvent.sourceRecord.occurredAtMs)}` : 'Ожидаем первое<br>тестовое событие';
+  $('price-time').innerHTML = marketRule ? observed ? `<strong>Получено ${time(observed.receivedAtMs)}</strong>Время цены неизвестно${positionFor(rule)?.status !== 'closed' && positionFor(rule) && !positionFor(rule).valuationAvailable ? '<br>Нет актуальной оценки позиции' : ''}${model.now - observed.observedAtMs > 45_000 ? '<br>Локальное наблюдение устарело' : ''}` : 'Ожидаем новый<br>рыночный снимок' : lastEvent ? `<strong>Получено ${time(lastEvent.result.receivedAtMs)}</strong>Возникло ${time(lastEvent.sourceRecord.occurredAtMs)}` : 'Ожидаем первое<br>тестовое событие';
 }
 function renderJournal() {
   const rows = [];
@@ -175,11 +198,19 @@ function renderJournal() {
       if (op.result?.receipt) description += ` · расход ${money(op.result.receipt.spentUnits)} ${quote}, получение ${op.result.receipt.receivedUnits} услов. ед.`;
       if (op.status === 'unknown') description += ' · повтор запрещён';
       rows.push({ at: op.updatedAtMs, rank: 2, icon: op.status === 'succeeded' ? '✓' : op.status === 'unknown' ? '?' : '→',
-        title: op.status === 'succeeded' ? marketRule ? 'Виртуальное условие выполнено' : 'Покупка имитирована' : `Операция: ${labels[op.status]}`, description: description + (marketRule ? ' · покупка не проводилась, цена исполнения неизвестна' : ''), status: op.status, statusLabel: operationLabel(rule, op) });
+        title: op.status === 'succeeded' ? marketRule ? operationLabel(rule, op) : 'Покупка имитирована' : `Операция: ${labels[op.status]}`, description: description + (marketRule ? ' · покупка не проводилась, цена исполнения неизвестна' : ''), status: op.status, statusLabel: operationLabel(rule, op) });
     }
     for (const entry of rule.decisions) rows.push({ at: entry.decidedAtMs, rank: 3, icon: '↻', title: entry.outcome === 'history_verified' ? 'История проверена владельцем DEMO'
       : entry.outcome === 'rule_revoked' ? 'Правило окончательно отозвано' : 'Решение по потоку сохранено',
       description: `${suffix} · ${entry.outcome === 'history_verified' ? 'Нужны отдельное включение и свежие данные' : 'История решения сохранена'}`, status: '' });
+  }
+  for (const p of model.positions ?? []) {
+    for (const observation of p.observations) rows.push({ at: observation.snapshot.receivedAtMs, rank: 1, icon: '⌁',
+      title: `Наблюдение позиции ${observation.snapshot.rawPriceUsd} USD / токен`,
+      description: `${p.id} · ${observation.disposition === 'closed' ? 'Снимок стал основанием выхода' : observation.disposition === 'valued' ? 'Оценка обновлена, выход не выполнен' : 'Не использован для оценки и выхода'} · пул ${p.binding.pairAddress} · локальный ID ${observation.snapshot.id}`, status: '' });
+    rows.push({ at: p.openedAtMs, rank: 4, icon: '↗', title: 'Открыта виртуальная позиция', description: `${p.id} · модельный вход ${p.display.entry} USD, сумма ${p.display.amount} USD`, status: '' });
+    if (p.closeRequest) rows.push({ at: p.closeRequest.requestedAtMs, rank: 4, icon: '→', title: 'Запрос закрытия сохранён', description: `${p.id} · ожидается новый пригодный снимок`, status: '' });
+    if (p.exit) rows.push({ at: p.exit.closedAtMs, rank: 5, icon: '✓', title: `Виртуальная позиция закрыта · ${exitLabels[p.exit.reason]}`, description: `${p.id} · модельный результат ${p.display.pnlUsd} USD · ${p.display.pnlPercent}%`, status: '' });
   }
   rows.sort((a, b) => b.at - a.at || b.rank - a.rank);
   $('journal-count').textContent = `Всего: ${rows.length}`;
@@ -188,19 +219,41 @@ function renderJournal() {
   $('archive').hidden = !archived.length;
   $('archive-list').innerHTML = archived.map(rule => `<div class="archive-row"><span>${escape(rule.config.assetId)} · ${date(rule.createdAtMs)}</span>${pill(rule.state)}</div>`).join('');
 }
+function renderPositions() {
+  const positions = model.positions ?? [], p = openPosition() ?? positions.at(-1);
+  $('position-card').hidden = !p;
+  if (p) {
+    const v = p.display, closed = p.status === 'closed';
+    const metric = (label, value) => `<div><p class="label">${label}</p><p class="value">${escape(value)}</p></div>`;
+    $('position-card').innerHTML = `<div class="card-heading"><div><p class="eyebrow">ВИРТУАЛЬНО · РАСЧЁТНАЯ МОДЕЛЬ</p><h2>Виртуальная позиция</h2></div>${pill(closed ? 'finished' : 'active', closed ? 'Закрыта' : p.status === 'close_requested' ? 'Ожидаем закрытия' : 'Открыта')}</div>
+      <p class="help">Расчёт по цене агрегатора без учёта исполнения, комиссий и проскальзывания. Условное количество не является onchain-балансом.</p>
+      <p class="help">Mint: <code>${escape(p.binding.mint)}</code><br>Закреплённый пул: <code>${escape(p.binding.pairAddress)}</code></p>
+      <div class="rule-grid">${metric('Сумма входа', displayDecimal(v.amount) + ' USD')}${metric('Условное количество', displayDecimal(v.quantity) + ' токенов')}${metric('Модельная цена входа', displayDecimal(v.entry) + ' USD / токен')}
+      ${metric(closed ? 'Модельная цена выхода' : 'Последняя оценка цены', p.valuationAvailable ? displayDecimal(v.price) + ' USD / токен' : 'Нет актуальной оценки')}
+      ${metric(closed ? 'Оценка при закрытии' : 'Оценка позиции', p.valuationAvailable ? displayDecimal(v.valuation) + ' USD' : 'Нет актуальной оценки')}
+      ${metric(closed ? 'Сохранённый результат' : 'Модельный результат', p.valuationAvailable ? displayDecimal(v.pnlUsd) + ' USD · ' + displayDecimal(v.pnlPercent) + '%' : 'Ожидаем новый пригодный снимок')}
+      ${metric('Тейк-профит / стоп-лосс', displayDecimal(v.takeProfit) + ' / ' + displayDecimal(v.stopLoss) + ' USD / токен')}</div>
+      <p class="help">Вход: ${date(p.entry.receivedAtMs)} · ${time(p.entry.receivedAtMs)}. ${closed ? `Выход: ${date(p.exit.snapshot.receivedAtMs)} · ${time(p.exit.snapshot.receivedAtMs)}. ${exitLabels[p.exit.reason]}.` : 'Срок ожидания входа больше не ограничивает позицию. Источник и пул закреплены до закрытия.'}</p>
+      ${!closed ? `<div class="notice neutral"><strong>${p.status === 'close_requested' ? 'Запрос закрытия сохранён' : 'Наблюдение позиции'}</strong>${p.status === 'close_requested' ? 'Расчёт по следующему новому пригодному снимку. Сохранённая старая цена не используется.' : 'Уровни выхода проверяются по новым снимкам. При скачке используется наблюдаемая цена, пропущенные движения неизвестны.'}</div><button class="button primary" id="close-position" type="button">${p.status === 'close_requested' ? 'Ожидаем снимок для закрытия' : 'Закрыть виртуальную позицию'}</button>` : ''}`;
+  }
+  const closed = positions.filter(p => p.status === 'closed');
+  $('position-history').hidden = !closed.length;
+  $('position-history-list').innerHTML = closed.map(p => `<details class="position-record"><summary>${escape(p.binding.mint)} · ${exitLabels[p.exit.reason]} · ${escape(displayDecimal(p.display.pnlUsd))} USD · ${escape(displayDecimal(p.display.pnlPercent))}%</summary><p class="help">${escape(p.id)}<br>Пул: ${escape(p.binding.pairAddress)}<br>Сумма ${escape(p.display.amount)} USD · количество ${escape(p.display.quantity)} · вход ${escape(p.display.entry)} USD · выход ${escape(p.display.price)} USD<br>Вход ${date(p.entry.receivedAtMs)}, выход ${date(p.exit.snapshot.receivedAtMs)}. Основания и точные дроби сохранены в SQLite.</p></details>`).join('');
+}
 function render(data, force = false) {
-  model = data; connected = true;
-  const next = JSON.stringify([data.currentRuleId, data.rules, data.market, Math.floor(data.now / 1000)]);
+  model = data;
+  renderTelegram(); connected = true;
+  const next = JSON.stringify([data.currentRuleId, data.rules, data.positions, data.market, Math.floor(data.now / 1000)]);
   if (force || next !== signature) {
     signature = next;
     const rule = current();
     $('create-card').hidden = !!rule && !creating;
     $('rule-card').hidden = !rule || creating;
     $('cancel-create').hidden = !rule;
-    renderRule(rule); renderJournal(); formMode(); renderMarket();
+    renderRule(rule); renderPositions(); renderJournal(); formMode(); renderMarket();
   }
   const rule = current();
-  const nextStatus = JSON.stringify([data.currentRuleId, rule?.state, rule?.operations.map(operation => [operation.id, operation.status]), creating]);
+  const nextStatus = JSON.stringify([data.currentRuleId, rule?.state, rule?.operations.map(operation => [operation.id, operation.status]), positionFor(rule)?.status, creating]);
   if (nextStatus !== statusSignature) { statusSignature = nextStatus; renderMarketRuleStatus(); }
   clearRecoveredMarketError();
   updateControls();
@@ -257,6 +310,10 @@ async function mutate(path, body, { form = null, message = '' } = {}) {
 $('create-form').addEventListener('submit', event => {
   event.preventDefault(); mutate('/api/rules', Object.fromEntries(new FormData(event.currentTarget)), { message: 'Правило создано. Теперь включите его.' });
 });
+$('position-card').addEventListener('click', event => {
+  if (event.target.closest('#close-position') && !event.target.disabled && openPosition()) mutate(`/api/positions/${openPosition().id}/close`, {});
+});
+$('scenario').addEventListener('change', () => { clearErrors(); formMode(); });
 $('price-form').addEventListener('submit', event => {
   event.preventDefault(); if (current()) mutate(`/api/rules/${current().config.id}/price`, Object.fromEntries(new FormData(event.currentTarget)), { form: 'price' });
 });
@@ -284,3 +341,15 @@ $('find-token').addEventListener('click', () => {
   mutate('/api/market/select', { mint: $('mint').value.trim() }, { message: 'Источник загружен. Укажите своё тестовое условие в USD, создайте и включите правило.' });
 });
 load(); setInterval(() => { if (!busy) load(); }, 2000);
+
+function renderTelegram() {
+  const t = model?.telegram; if (!t) return;
+  const states = { identity_error: 'Telegram остановлен: проверьте ID бота или webhook через npm run doctor/setup', disabled: 'Не настроен: добавьте TELEGRAM_BOT_TOKEN в локальный .env по инструкции', connecting: 'Подключение…', connected: 'Соединение работает', retrying: 'Telegram недоступен; повторим подключение', token_error: 'Ошибка доступа к боту: проверьте токен и права', conflict: 'Другой экземпляр получает updates: остановите его', storage_error: 'Ошибка хранения Telegram: действия остановлены' };
+  $('telegram-status').textContent = `${states[t.connection] ?? t.connection}. ${t.linked ? 'Владелец привязан' : 'Владелец не привязан'}. В очереди: ${t.queued}; не доставлено: ${t.failed}.`;
+  $('telegram-code').disabled = busy || !connected || !t.configured || t.identityVerified === false || t.linked;
+  $('telegram-unlink').disabled = busy || !connected || !t.linked && !t.codeExpiresAtMs;
+  if (t.linked || !t.codeExpiresAtMs || t.codeExpiresAtMs <= model.now) $('telegram-link').textContent = '';
+  if (model.telegramLink) $('telegram-link').textContent = `В личном чате своего бота отправьте /start ${model.telegramLink.code} (до ${time(model.telegramLink.expiresAtMs)}). Код одноразовый; не передавайте его другим.`;
+}
+$('telegram-code').addEventListener('click', () => mutate('/api/telegram/code', {}));
+$('telegram-unlink').addEventListener('click', () => mutate('/api/telegram/unlink', {}, { message: 'Привязка отключена. Старые кнопки больше не дают доступа.' }));

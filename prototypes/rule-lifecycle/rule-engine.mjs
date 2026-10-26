@@ -1,3 +1,4 @@
+import { emptyTelegramState, validateTelegramState } from './telegram-state.mjs';
 import { SimulatedExecutor } from './simulator.mjs';
 import { SnapshotStore, StorageError } from './snapshot-store.mjs';
 import { emptySnapshot, validateSnapshot } from './state-schema.mjs';
@@ -5,6 +6,8 @@ import { canonical, priceBasisValid, sourceIdValid, sourceEventValid, samePriceB
 import { authorizedDemoPrincipal } from './demo-owner.mjs';
 import { SyntheticSource } from './synthetic-source.mjs';
 import { assetValid, marketBindingValid, marketSnapshotValid, MARKET_PRICE_BASIS } from './market-contract.mjs';
+
+import { positionPolicyValid, positionValues, exitReason, sameBinding } from './position-model.mjs';
 
 export const LIVE_TRADING_ALLOWED = false;
 const terminalRules = new Set(['finished', 'expired', 'revoked']);
@@ -36,6 +39,9 @@ export class RuleEngine {
   #executor;
   #rules = new Map();
   #operations = new Map();
+  #positions = new Map();
+  #telegram = emptyTelegramState();
+  #startedAt;
   #commands = new Map();
   #events = new Map();
   #streams = new Map();
@@ -55,6 +61,7 @@ export class RuleEngine {
     requireValue(executor instanceof SimulatedExecutor, 'SIMULATOR_REQUIRED');
     requireValue(typeof clock === 'function', 'INVALID_CLOCK');
     this.#clock = clock;
+    this.#startedAt = this.#now();
     this.#executor = executor;
     requireValue(typeof faultInjector === 'function', 'INVALID_FAULT_INJECTOR');
     this.#faultInjector = faultInjector;
@@ -65,6 +72,8 @@ export class RuleEngine {
         const state = validateSnapshot(this.#store.load());
         this.#rules = new Map(state.rules);
         this.#operations = new Map(state.operations);
+        this.#positions = new Map(state.positions);
+        this.#telegram = state.telegram;
         this.#commands = new Map(state.commands);
         this.#events = new Map(state.events);
         this.#streams = new Map(state.streams);
@@ -114,7 +123,7 @@ export class RuleEngine {
 
   #snapshot() {
     return {
-      version: 3, nextOperation: this.#nextOperation, nextIncident: this.#nextIncident,
+      version: 7, telegram: this.#telegram, positions: [...this.#positions], nextOperation: this.#nextOperation, nextIncident: this.#nextIncident,
       rules: [...this.#rules], operations: [...this.#operations],
       commands: [...this.#commands], events: [...this.#events],
       streams: [...this.#streams],
@@ -126,6 +135,19 @@ export class RuleEngine {
     this.#healthy();
     try { this.#store?.save(this.#snapshot(), { beforeCommit }); }
     catch (error) { this.#storageFailure = error; throw error; }
+  }
+
+  operationalSummary() {
+    this.#healthy();
+    return { schemaVersion: 7, botId: this.#telegram.botId, rules: this.#rules.size,
+      positions: this.#positions.size, ownerLinked: !!this.#telegram.owner };
+  }
+
+  getTelegramState() { this.#healthy(); return structuredClone(this.#telegram); }
+
+  saveTelegramState(value) {
+    this.#healthy(); validateTelegramState(value);
+    this.#telegram = structuredClone(value); this.#checkpoint();
   }
 
   close() {
@@ -217,6 +239,10 @@ export class RuleEngine {
         integer(limits.maxSlippageBps) && limits.maxSlippageBps <= 10_000 &&
         integer(limits.maxEventAgeMs, 1), 'INVALID_LIMITS');
       requireValue(integer(config.expiresAtMs) && config.expiresAtMs > now, 'INVALID_EXPIRY');
+      if (config.position) {
+        requireValue(marketBindingValid(config.market) && positionPolicyValid(config.position), 'INVALID_POSITION_POLICY');
+        requireValue(![...this.#positions.values()].some(p => p.status !== 'closed'), 'POSITION_ALREADY_OPEN');
+      }
       requireValue(!this.#rules.has(config.id), 'RULE_ALREADY_EXISTS');
       this.#rules.set(config.id, {
         config: frozenCopy(config), state: 'draft', reason: 'created', createdAtMs: now,
@@ -303,6 +329,7 @@ export class RuleEngine {
   }
 
   #evaluateEvent(rule, event, now) {
+    if (rule.config.position && [...this.#positions.values()].some(p => p.status !== 'closed')) return { disposition: 'ignored_reserved' };
     if (rule.state !== 'active') return { disposition: 'ignored_inactive' };
     if (rule.submittedOperationId || rule.pendingOperationId) return { disposition: 'ignored_reserved' };
     if (event.assetId !== rule.config.assetId) return { disposition: 'ignored_asset' };
@@ -512,7 +539,8 @@ export class RuleEngine {
       requireValue(this.#streams.get(operation.ruleId).continuity === 'continuous', 'SOURCE_DECISION_REQUIRED');
       requireValue(this.#connectedStreams.has(operation.ruleId), 'SOURCE_NOT_CONNECTED');
     }
-    if (rule.state !== 'active') this.#cancelPrepared(rule, 'rule_not_active', now);
+    if (rule.config.position && [...this.#positions.values()].some(p => p.status !== 'closed')) this.#cancelPrepared(rule, 'position_already_open', now);
+    else if (rule.state !== 'active') this.#cancelPrepared(rule, 'rule_not_active', now);
     else if (now - operation.event.observedAtMs > rule.config.limits.maxEventAgeMs) {
       this.#cancelPrepared(rule, 'event_became_stale', now);
     }
@@ -566,6 +594,16 @@ export class RuleEngine {
     if (result?.mode !== 'demo' || !['succeeded', 'failed', 'unknown'].includes(result.status)) {
       result = { mode: 'demo', status: 'unknown', reason: 'invalid_simulator_result' };
     }
+    if (rule.config.position && result.status === 'succeeded' && result.kind !== 'virtual-condition') {
+      result = { mode: 'demo', status: 'unknown', reason: 'invalid_position_simulator_result' };
+    }
+    if (rule.config.position && result.status === 'succeeded') {
+      requireValue(![...this.#positions.values()].some(p => p.status !== 'closed'), 'POSITION_ALREADY_OPEN');
+      const id = `position-${operation.id}`;
+      this.#positions.set(id, { id, ruleId: rule.config.id, operationId: operation.id, status: 'open',
+        binding: rule.config.market, policy: rule.config.position, amountUnits: rule.config.amountUnits,
+        entry: operation.event, openedAtMs: now, last: operation.event, observations: [], closeRequest: null, exit: null });
+    }
     operation.status = result.status; operation.updatedAtMs = now;
     operation.result = frozenCopy(result); operation.reason = result.reason ?? result.status;
     if (!terminalRules.has(rule.state)) {
@@ -575,6 +613,56 @@ export class RuleEngine {
     this.#faultInjector('before_result_commit');
     this.#checkpoint();
     this.#faultInjector('after_result_commit');
+  }
+
+  listPositions() { this.#healthy(); return frozenCopy([...this.#positions.values()]); }
+
+  requestPositionClose(positionId, { requestId } = {}) {
+    return this.#once(requestId, { action: 'closePosition', positionId }, () => {
+      const p = this.#positions.get(positionId);
+      requireValue(p, 'POSITION_NOT_FOUND');
+      requireValue(p.status !== 'closed', 'POSITION_ALREADY_CLOSED');
+      // Repeated requests, even with another key, do not move the freshness boundary.
+      if (!p.closeRequest) p.closeRequest = { requestId, requestedAtMs: this.#now(), afterSnapshotId: p.last.id };
+      p.status = 'close_requested';
+      return frozenCopy({ positionId, ruleId: p.ruleId, action: 'close_requested' });
+    });
+  }
+
+  receivePositionSnapshot(positionId, event) {
+    this.#healthy();
+    const p = this.#positions.get(positionId), now = this.#now();
+    requireValue(p, 'POSITION_NOT_FOUND');
+    requireValue(marketSnapshotValid(event), 'INVALID_MARKET_SNAPSHOT');
+    requireValue(sameBinding(p.binding, event), 'MARKET_BINDING_MISMATCH');
+    const prior = p.observations.find(o => o.snapshot.id === event.id);
+    if (prior) {
+      requireValue(canonical(prior.snapshot) === canonical(event), 'EVENT_ID_CONFLICT');
+      return frozenCopy({ disposition: prior.disposition, duplicate: true });
+    }
+    if (event.id === p.entry.id) {
+      requireValue(canonical(event) === canonical(p.entry), 'EVENT_ID_CONFLICT');
+      return { disposition: 'ignored_entry_snapshot', duplicate: true };
+    }
+    let disposition = p.status === 'closed' ? 'ignored_closed'
+      : event.receivedAtMs > now ? 'ignored_future'
+      : now - event.observedAtMs > this.#rule(p.ruleId).config.limits.maxEventAgeMs ? 'ignored_stale'
+      : event.observedAtMs < this.#startedAt || event.observedAtMs <= p.last.observedAtMs ? 'ignored_out_of_order' : 'valued';
+    if (disposition === 'valued') {
+      p.last = frozenCopy(event);
+      const reason = p.closeRequest && event.observedAtMs > p.closeRequest.requestedAtMs ? 'user_request'
+        : exitReason(p.entry.priceUnits, event.priceUnits, p.policy);
+      if (reason) {
+        p.status = 'closed'; disposition = 'closed';
+        p.exit = { reason, snapshot: frozenCopy(event), closedAtMs: now,
+          values: positionValues(p.amountUnits, p.entry.priceUnits, event.priceUnits, p.policy) };
+      }
+    }
+    p.observations.push({ snapshot: frozenCopy(event), disposition });
+    this.#faultInjector('before_position_commit');
+    this.#checkpoint(() => this.#faultInjector('inside_position_transaction'));
+    this.#faultInjector('after_position_commit');
+    return frozenCopy({ disposition });
   }
 
   tick() {
