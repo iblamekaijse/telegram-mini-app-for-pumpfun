@@ -1,0 +1,266 @@
+{
+  "preparedAtUtc": "2026-10-26T21:48:24.175622+00:00",
+  "userTimezone": "Europe/Moscow",
+  "baseMain": "c5faa09cdbf9a3186e1cf3b4a05ad7c923edbb8c",
+  "releaseTagUnchanged": "v0.1.0-paper.1",
+  "branch": "codex/live-integration-run",
+  "scope": "Preparation and offline regression of one resumable WSL rehearsal; Cloud public market probe is separate. This is NOT a live Telegram/WSL run.",
+  "environment": {
+    "kind": "managed Cloud",
+    "wslAccess": false,
+    "realTelegramTokenAvailable": false,
+    "realConfigurationAvailable": false,
+    "userDatabaseUsedForTests": false,
+    "realRecipientsMessaged": false
+  },
+  "testRun": {
+    "command": "npm test",
+    "node": "v24.19.0",
+    "tests": 238,
+    "passed": 238,
+    "failed": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "existingTests": 212,
+    "newTests": 26,
+    "tapFile": "prototypes/rule-lifecycle/results/live-check-preparation.tap",
+    "tapSha256": "b563b93d78afe218b774d02d289eed88d0f28b0bcc0492572be48ce0de16e9dc",
+    "newCoverage": [
+      "real application HTTP/SQLite with fake Telegram and fixture market transports",
+      "entry uses a new snapshot; no crossing remains incomplete",
+      "one getUpdates worker, private owner and exact reply correlation",
+      "API sends distinguished from received/processed updates and virtual calculation",
+      "duplicate updates; wrong user/chat/unrelated or stale reply rejected",
+      "interrupt after create, entry, update, close request, close, restart; same IDs on resume",
+      "new Node process reopens same DB and preserves .env, one operation/position and confirmed messages",
+      "existing rule/position/unknown/queue/app conflicts preserve data",
+      "archived user history preserved; later user activity cannot overwrite completed report",
+      "source outage, identity mismatch, webhook and send failure stay incomplete",
+      "native CLI missing-token/invalid-argument secret-safe refusals"
+    ]
+  },
+  "publicLiveMarket": {
+    "file": "prototypes/rule-lifecycle/results/live-check-cloud-market.json",
+    "scope": "Two actual public snapshots from Cloud, 10s interval and pinned PumpSwap pool. Provider price age unknown. No rule/position or Telegram verification."
+  },
+  "unconfirmed": [
+    "real sendMessage to existing owner from WSL",
+    "real owner /status update and response in WSL",
+    "complete real-source virtual entry/close/restart chain in WSL",
+    "human viewed final result",
+    "full step-by-step Telegram creation dialog"
+  ],
+  "codeProvenance": {
+    "description": "SHA-256 per source/test/package/static file in tested working tree, before the final commit; documentation and report-only changes do not change this manifest. No claim that baseMain contains the new tool.",
+    "files": [
+      {
+        "path": "prototypes/rule-lifecycle/demo-owner.mjs",
+        "sha256": "d440ae0c13310fef7a2a00fe77d81d8b5430ee9fd701d4dab79d34b27ee54e84"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/demo.mjs",
+        "sha256": "05d4dc31795b559c76f51147a29eabb1095f77704c1116f05c76a94cea36317c"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/event-contract.mjs",
+        "sha256": "2140f29e3d26eedb110fa2f7de0b2ec33696602bd9940ea6b60cc1be62502753"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/fixtures.mjs",
+        "sha256": "07f89d54a30a64854b0e01fea15c92e86d2e00a2be85dcdb66726c12c02f3b88"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/live-check.test.mjs",
+        "sha256": "a7b2bc9cc672152bc512c2055715d813512f9fe0a535bdf4ac715e8cbcc5baf4"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/local-ops.test.mjs",
+        "sha256": "37c6e4677d7ff3a2a7959677ead73d0703263e77c0867cb0289cdbdd796e06ac"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/market-contract.mjs",
+        "sha256": "c8e098fab2a23858fa38cfbb117e0c60366c769726233b9e115334b2c27bd3a6"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/market-reselection.test.mjs",
+        "sha256": "a05779b5b02f21b8402522c0290cd3397c0fa16223668f9bac9a5ef1a107c6fc"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/market.test.mjs",
+        "sha256": "078608c996bb1fe0aff147b73cc6ad5223e642e8d09f5c1c665061f930f437e6"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/cli.mjs",
+        "sha256": "dbf874be6dc09e953f0ae7456eadd15db630ada040301704e69f3e9fc83e676b"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/config.mjs",
+        "sha256": "73a4a3784ae6426ab6a568e410a6a139a8e3ac4e3acb3869cf62d8361870775f"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/live-check-cli.mjs",
+        "sha256": "40ce185e69f4bf57c6f3daf549dbc1f7a92c2b41fae7875857a243dd55eeb4eb"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/live-check.mjs",
+        "sha256": "e9af229d7fff7e4ccb922116ee90f5ba2959bcf537fb0cd85ba916da06e6d3b4"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/local.mjs",
+        "sha256": "a7db9d5e9b5b01a901909164bce53ae227ac3734c520502be44e4671402a02f6"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/prompt.mjs",
+        "sha256": "24b22de3efde9a1e8a1682d3743b2d35ff0b92c0d7e33ae4de2e027291f5ea8f"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/start.mjs",
+        "sha256": "8d842567269f5ad256ab1d6eedbda1f4fb35c5180d0205ebff306856317b1b07"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/ops/storage.mjs",
+        "sha256": "da4d0827ed71576a5535836e1a63209fb7e52b3e9929599764eac4850b5a277e"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/owner-decisions.test.mjs",
+        "sha256": "c19bf6c3e0b3e378cfd864cee536116ac7fc773a82b555773ac20dccb7dc76c3"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/owner-demo.mjs",
+        "sha256": "712df18a2bfd9f1c3bf0b1e61c10fcd001de78cc56c4cfdf61fdc30ff61fb10c"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/package.json",
+        "sha256": "d0282508b4fbd1e0cb5fe8cf66eaa08d3b2fd028984a9adb15622387f5712477"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/persistence.test.mjs",
+        "sha256": "46bed676ad478d06b82c348cd3aaf7f7a70b4e39d4d841ab950e3da03e48e0f4"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/position-model.mjs",
+        "sha256": "157aae33722f384f138e2418bcdd09c99c14cf4e548f63d69b354ee7c7126748"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/positions.test.mjs",
+        "sha256": "395c4b402c160c5497e9ea2d6cc3c2fe22804bdbc1d558d89233dbe3cda9dac3"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/restart-demo.mjs",
+        "sha256": "4b88353edaedf1f97748c5ee627ae8cec4d2ba66ce4e57198fe1b3a52b0014be"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/rule-engine.mjs",
+        "sha256": "cb2e8534ad777cf45a94564b5a935358d18591af732b1be24c43aef94f3be40f"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/rule-engine.test.mjs",
+        "sha256": "068b81d32e69b03f34f8e3d6529052eea5e34b7301bad6c3c371f02077fe0be7"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/simulator.mjs",
+        "sha256": "dc07f2b98aecd4e794c2839327b1ebfc65e40d0982c5c912459326573f21d1c8"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/snapshot-store.mjs",
+        "sha256": "f8380124d2f44d3854754c5734c20ab6f79c9bb962cb2e492b3fe529182fa7ab"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/source-consumer.mjs",
+        "sha256": "f657bf971e8037c89449f21399bd8b60c5ea4fcbceb29b5ced03060eeebad471"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/source-demo.mjs",
+        "sha256": "dd73e71b57b324f6376f927aec3632721220583ba8aa9a043a095484aa9e6780"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/source.test.mjs",
+        "sha256": "2b1307b3d2ccef9eebc0a3dcc6cf1609b63289e2ae00447f370abce1a6811ad7"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/state-schema.mjs",
+        "sha256": "6e799a11eef9beaf14caf1fd2fadd99b2ef8f3b2a945d772378d6d28aaafd59d"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/synthetic-source.mjs",
+        "sha256": "3f69f75d9356479e6aa2429e2a4582acd66a9d4fd37a8fcdcc493488d0e4081a"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/telegram-dialog.test.mjs",
+        "sha256": "9a363eb24643437ac0ef3eb5e204daed2c93f9846746ff812815e3c52392b06f"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/telegram-identity.mjs",
+        "sha256": "e28bbe23d6b4f62c866aae02f35a90d1c1d3bfa5be3428aef12f5accb3d91e86"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/telegram-state.mjs",
+        "sha256": "26b1e5edc95b3b91aedf335ff25710f1f36467df82f64099e2f50385af8da14d"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/telegram.test.mjs",
+        "sha256": "dda188f92e44fe604b70b6a193e2aa824bbff21e0362c01ed29bd487664ed7ef"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/test-support/live-check-worker.mjs",
+        "sha256": "ee391643c0c4476ae93b20f76bfe0ad7926f6f2597733961276de0564fc774f8"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/test-support/market-browser-server.mjs",
+        "sha256": "e49024acf8ca23161eb0b769f16fd18e2cb39b980ec34f1c502a321c0d47a6bf"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/test-support/position-worker.mjs",
+        "sha256": "524aac9bef272bd7df89c3f9bff66461c1136600e85cf08f1c326b383e6e5055"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/test-support/process-worker.mjs",
+        "sha256": "b551ea3914631e354faa752cca7831958bcb1dd76ddf7bffc3082197ed522104"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/test-support/telegram-browser-server.mjs",
+        "sha256": "782c75f62757767066e2430a36a6c64dd87062e5b6a11a73e75f04771499ccdf"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/market-source.mjs",
+        "sha256": "2aafecdc8b3f26887024ac14197c6953a02f3ccbcec632c4eb611d33bd51afca"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/panel-service.mjs",
+        "sha256": "594d52d229bc58dadc8d680d9eb3065cad6d47da5719d1540f88a06781d84180"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/public/app.js",
+        "sha256": "3626487d2e8c939fb7f7d46da2819907ff4eb02e629c6a53755bdc1e9322d0ce"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/public/index.html",
+        "sha256": "fae04e937401f86d00ddd65a3eed67d0e5d95100610f2ef8659972d2a22144f9"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/public/style.css",
+        "sha256": "55b184efc297bb4da10b40f05b36fdc9657ef63fb4e36fe4a50b98851acd244d"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/server.mjs",
+        "sha256": "7ba6fc7795ce666ca7d4cf7797dd1fe2700d3eef1461593c3b0815c4a3da13d8"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/telegram-dialog.mjs",
+        "sha256": "1d1e4a322831c9b7c4e24056fd4df8b5f1bd27e30ebdb1cfe42638693661f2de"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/telegram-revoke.mjs",
+        "sha256": "e4f0f4bf17ca22febefdbb931f837cb64031218305c80cbb39161ad0b45bac2f"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web/telegram.mjs",
+        "sha256": "81cc8d0603865d1a7e0569a4f110b9c33cbea873586b56d438ec37f0324b39ae"
+      },
+      {
+        "path": "prototypes/rule-lifecycle/web.test.mjs",
+        "sha256": "2606cb41fc332f6ca97d5a102e5c1f984746ac36dee927075e45a95a343a45e8"
+      }
+    ]
+  }
+}

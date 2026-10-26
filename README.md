@@ -13,3 +13,5 @@
 По предоставленному пользователем скриншоту WSL подтверждены Node.js 24.19.0, успешный getMe настоящего бота, совпадение ID, отсутствие webhook, сохранение настроек и запуск сервера. Это **не** подтверждает полный живой Telegram-цикл. Автоматические проверки используют временные данные и тестовые транспорты; реальные сообщения получателям не отправляются.
 
 [Telegram](prototypes/rule-lifecycle/web/TELEGRAM.md) · [Рыночные ограничения](prototypes/rule-lifecycle/web/MARKET_DATA.md) · [Виртуальные позиции](prototypes/rule-lifecycle/web/VIRTUAL_POSITIONS.md) · [Проверки](prototypes/rule-lifecycle/VALIDATION.md) · [Бриф и история проекта](PROJECT_BRIEF.md).
+
+Следующий интеграционный этап (новая ветка `codex/live-integration-run`, без автоматического слияния): [один живой прогон в WSL](prototypes/rule-lifecycle/LIVE_CHECK.md). Cloud подтвердил доступ к настоящему рыночному API; Telegram/WSL проверены только на тестовых транспортах до запуска владельцем. Тег выпуска не изменён.
