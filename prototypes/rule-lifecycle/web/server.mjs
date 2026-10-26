@@ -51,10 +51,13 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
       catch { throw new PanelError('INVALID_JSON', 'Не удалось прочитать данные запроса.'); }
       const positionMatch = url.pathname.match(/^\/api\/positions\/([a-zA-Z0-9_-]+)\/close$/);
       const match = url.pathname.match(/^\/api\/rules\/([a-zA-Z0-9_-]+)\/([a-z_-]+)$/);
-      const result = await serial(() => {
+      const result = url.pathname === '/api/market/select' ? await (async () => {
+        const work = await serial(() => service.beginMarketSelect(body));
+        const fetched = await work.promise;
+        return serial(() => service.finishMarketSelect(fetched));
+      })() : await serial(() => {
         if (url.pathname === '/api/telegram/code') return { ...service.state(), telegramLink: service.telegram.createCode() };
         if (url.pathname === '/api/telegram/unlink') { service.telegram.unlink(); return service.state(); }
-        if (url.pathname === '/api/market/select') return service.selectMarket(body);
         if (url.pathname === '/api/rules') return service.create(body);
         if (positionMatch) return service.closePosition(positionMatch[1], body);
         if (!match) throw new PanelError('NOT_FOUND', 'Действие не найдено.', {}, 404);
@@ -77,7 +80,11 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
   const timer = setInterval(() => {
     if (polling || closing) return;
     polling = true;
-    serial(() => service.pollMarket()).catch(error => {
+    (async () => {
+      const work = await serial(() => service.beginMarketPoll());
+      const fetched = await work.promise;
+      return serial(() => service.finishMarket(fetched));
+    })().catch(error => {
       // Storage errors stay fail-closed in RuleEngine; never replace history.
       console.error(`Опрос остановлен: ${error.code ?? 'INTERNAL_ERROR'}`);
     }).finally(() => { polling = false; });
@@ -86,6 +93,7 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
   return { url: `http://127.0.0.1:${server.address().port}`, close: async () => {
     closing = true; clearInterval(timer);
     await bot?.close();
+    while (polling) await new Promise(resolve => setTimeout(resolve, 10));
     await new Promise((done, fail) => server.close(error => error ? fail(error) : done()));
     await mutations; service.close();
   } };

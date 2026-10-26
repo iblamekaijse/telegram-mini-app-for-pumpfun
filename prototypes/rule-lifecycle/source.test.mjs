@@ -280,7 +280,7 @@ test('v1 SQLite history is upgraded without losing rules, command identity or an
   assert.equal(calls(f), 1);
   const inspected = new DatabaseSync(f.storagePath);
   const upgraded = JSON.parse(inspected.prepare('SELECT payload FROM snapshot').get().payload);
-  assert.equal(upgraded.version, 5); assert.deepEqual(upgraded.streams, []);
+  assert.equal(upgraded.version, 6); assert.deepEqual(upgraded.streams, []);
   inspected.close();
 });
 

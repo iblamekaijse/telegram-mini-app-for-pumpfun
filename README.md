@@ -17,4 +17,4 @@ npm start
 
 [Виртуальная позиция: вход, наблюдение, TP/SL и ручное закрытие](prototypes/rule-lifecycle/web/VIRTUAL_POSITIONS.md) — отдельный явно выбираемый сценарий, без реальных сделок.
 
-[Telegram: локальный токен, привязка, команды и приёмка](prototypes/rule-lifecycle/web/TELEGRAM.md).
+[Telegram: создание правила с телефона, история, локальный токен и приёмка](prototypes/rule-lifecycle/web/TELEGRAM.md).

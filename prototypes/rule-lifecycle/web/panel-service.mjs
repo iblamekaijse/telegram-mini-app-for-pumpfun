@@ -32,12 +32,36 @@ function money(value, field) {
   return units;
 }
 
+// One parser shared by the panel and Telegram dialog. Returned integers are never rounded.
+export function positionField(field, value) {
+  const text = String(value ?? '').trim().replace(',', '.');
+  const messages = { threshold: 'Положительная цена USD, до 9 знаков после запятой, без округления.',
+    amount: 'Положительная сумма USD, до двух знаков после запятой; значение слишком велико или неточно.',
+    expiresInMinutes: 'Целое число минут от 1 до 1440.',
+    takeProfit: 'TP больше 0 и не выше 10000%; до двух знаков после запятой.',
+    stopLoss: 'SL больше 0 и меньше 100%; до двух знаков после запятой.' };
+  try {
+    let units;
+    if (field === 'threshold') units = decimalUnits(text);
+    else if (field === 'expiresInMinutes') {
+      if (!/^\d+$/.test(text)) throw new Error();
+      units = Number(text); if (units < 1 || units > 1440) throw new Error();
+    } else {
+      units = money(text, field);
+      if (field === 'amount') units *= 10_000_000;
+      if (field === 'takeProfit' && units > 1_000_000 || field === 'stopLoss' && units > 9999) throw new Error();
+    }
+    if (!Number.isSafeInteger(units)) throw new Error();
+    return units;
+  } catch { throw new PanelError('INVALID_FIELDS', messages[field], { [field]: messages[field] }); }
+}
+
 /** Thin local UI adapter. All rule/operation decisions remain in RuleEngine. */
 export async function createPanelService({ dataDir, clock = Date.now, marketFetch = fetch, telegramConfigured = false }) {
   let initialize = false;
   try { mkdirSync(dataDir); initialize = true; }
   catch (error) { if (error.code !== 'EEXIST') throw error; }
-  let engine;
+  let engine, entryEpoch = 0;
   class PanelSimulator extends SimulatedExecutor {
     submit(intent) {
       const operation = engine.getOperation(intent.operationId);
@@ -107,7 +131,7 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
       const policy = {};
       for (const [field, max] of [['takeProfit', 1_000_000], ['stopLoss', 9999]]) {
         try {
-          policy[field + 'Bps'] = money(body[field], field);
+          policy[field + 'Bps'] = positionField(field, body[field]);
           if (policy[field + 'Bps'] > max) throw new Error();
         } catch { fields[field] = field === 'stopLoss' ? 'Процент больше 0 и меньше 100; до двух знаков после запятой.' : 'Процент больше 0 и не выше 10000; до двух знаков после запятой.'; }
       }
@@ -119,13 +143,13 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     const binding = prior?.config.market ?? selected.binding;
     if (isMarket && (!mintValid(body.mint) || binding?.mint !== body.mint || !prior &&
       !selected.snapshotUsable)) fields.mint = 'Сначала загрузите свежую цену этого mint и поддерживаемый пул.';
-    const minutes = Number(body.expiresInMinutes);
+    let minutes;
+    try { minutes = positionField('expiresInMinutes', body.expiresInMinutes); } catch (error) { Object.assign(fields, error.fields); }
     if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 1440) fields.expiresInMinutes = 'Укажите целое число от 1 до 1440 минут.';
     const values = {};
     for (const field of ['threshold', 'amount']) {
       try {
-        values[field] = isMarket && field === 'threshold' ? decimalUnits(String(body[field] ?? '').trim().replace(',', '.')) : money(body[field], field);
-        if (isMarket && field === 'amount') values[field] *= 10_000_000;
+        values[field] = isMarket ? positionField(field, body[field]) : money(body[field], field);
         if (!Number.isSafeInteger(values[field])) throw new TypeError();
       }
       catch (error) { Object.assign(fields, error.fields ?? { [field]: field === 'threshold' ? 'Положительная цена USD, до 9 знаков после запятой, без округления.' : 'Сумма слишком велика.' }); }
@@ -148,6 +172,7 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
       ...(isMarket ? { market: binding } : {}), ...(position ? { position } : {}),
     };
     engine.createRule(config, { requestId: `create:${key}` });
+    entryEpoch++;
     ensureBinding(engine.getRule(id));
     return state();
   }
@@ -171,6 +196,7 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
   function command(id, action, body) {
     const rule = requireRule(id);
     const key = requestKey(body.requestId);
+    entryEpoch++;
     if (rule.config.market && !['enable', 'pause', 'revoke'].includes(action)) throw new PanelError('NO_SNAPSHOT_HISTORY', 'Снимки не имеют подтверждённого потока истории. Действие недоступно.', {}, 422);
     let decisionResult = null;
     if (action === 'enable' || action === 'pause') engine[action](id, { requestId: `ui:${key}` });
@@ -193,28 +219,37 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     const rule = current(), snapshot = result.snapshot, position = openPosition();
     // Only a NEW successful poll can enter this path; cached state is never re-emitted.
     if (snapshot && position) engine.receivePositionSnapshot(position.id, snapshot);
-    if (snapshot && rule?.config.market && !['finished', 'expired', 'revoked'].includes(rule.state) &&
+    if (snapshot && (result.entryEpoch === undefined || result.entryEpoch === entryEpoch) && rule?.config.market && !['finished', 'expired', 'revoked'].includes(rule.state) &&
       rule.config.market.mint === snapshot.mint && rule.config.market.pairAddress === snapshot.pairAddress) {
       const delivery = engine.receiveMarketSnapshot(rule.config.id, snapshot);
       if (delivery.disposition === 'prepared') await engine.executePrepared(delivery.operationId, { requestId: `observe:${snapshot.id}` });
     }
     return state();
   }
-  async function selectMarket(body) {
+  function beginMarketSelect(body) {
     if (!mintValid(body.mint)) throw new PanelError('INVALID_FIELDS', 'Проверьте mint-адрес.', { mint: 'Нужен Solana-адрес: Base58, ровно 32 байта.' });
     if (openPosition()) throw new PanelError('POSITION_ALREADY_OPEN', 'Источник и пул закреплены открытой позицией. Дождитесь её закрытия.', {}, 409);
     if (current() && !['finished', 'expired', 'revoked'].includes(current().state)) throw new PanelError('RULE_ALREADY_OPEN', 'Сначала завершите или окончательно отзовите текущее правило. Его источник закреплён.', {}, 409);
-    const result = await market.select(body.mint);
+    const epoch = entryEpoch;
+    return { promise: market.select(body.mint).then(result => ({ ...result, entryEpoch: epoch })) };
+  }
+  async function finishMarketSelect(result) {
     if (result.limited) throw new PanelError('MARKET_RATE_LIMIT', 'Следующий запрос будет доступен после показанного времени опроса.', {}, 429);
     return recordMarket(result);
   }
+  async function selectMarket(body) { return finishMarketSelect(await beginMarketSelect(body).promise); }
+  const beginMarketPoll = () => {
+    const epoch = entryEpoch;
+    const work = current() && !current().config.market && !['finished', 'expired', 'revoked'].includes(current().state) ? Promise.resolve({ limited: true }) : market.poll();
+    return { promise: work.then(result => ({ ...result, entryEpoch: epoch })) };
+  };
   const closePosition = (id, body) => { engine.requestPositionClose(id, { requestId: `close:${requestKey(body.requestId)}` }); return state(); };
-  telegram = new TelegramController({ engine, view: state, command, closePosition, clock, configured: telegramConfigured });
+  telegram = new TelegramController({ engine, view: state, command, closePosition, create, validateField: positionField, beginMarketSelect, finishMarketSelect, clock, configured: telegramConfigured });
   telegram.resume();
   const sync = fn => (...args) => { try { return fn(...args); } finally { telegram.reconcile(); } };
   const asyncSync = fn => async (...args) => { try { return await fn(...args); } finally { telegram.reconcile(); } };
-  return { state, telegram, create: sync(create), price: asyncSync(price), command: sync(command), selectMarket: asyncSync(selectMarket),
+  return { state, telegram, beginMarketSelect, beginMarketPoll, finishMarketSelect: asyncSync(finishMarketSelect), finishMarket: asyncSync(recordMarket), create: sync(create), price: asyncSync(price), command: sync(command), selectMarket: asyncSync(selectMarket),
     closePosition: sync(closePosition),
-    pollMarket: asyncSync(async () => current() && !current().config.market && !['finished', 'expired', 'revoked'].includes(current().state) ? state() : recordMarket(await market.poll())),
+    pollMarket: asyncSync(async () => recordMarket(await beginMarketPoll().promise)),
     close: () => engine.close() };
 }

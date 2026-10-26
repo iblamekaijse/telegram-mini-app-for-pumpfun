@@ -1,0 +1,15 @@
+{
+  "mode": "OFFLINE bot and market test transports; Chromium observes real HTTP/SQLite",
+  "checks": [
+    "menu_mint_validation_source",
+    "all_fields_with_pending_dialog_SIGKILL_restart_continue",
+    "review_refresh_version_confirmation_separate_enable_duplicate_confirmation",
+    "entry_notification_manual_close_new_snapshot_saved_result_history_detail",
+    "one_rule_one_operation_mobile_no_overflow_no_JS_errors"
+  ],
+  "result": "passed",
+  "pageErrors": [],
+  "rules": 1,
+  "operations": 1,
+  "positionResultUsd": "70"
+}

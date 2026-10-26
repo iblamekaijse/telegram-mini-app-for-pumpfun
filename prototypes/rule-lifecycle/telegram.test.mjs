@@ -142,7 +142,7 @@ test('v4 SQLite upgrades without discarding rule/position history', async t => {
   assert.equal(restored.state().positions[0].status, 'open'); assert.equal(restored.state().rules[0].config.id, id);
   assert.equal(restored.telegram.status().linked, false); restored.close();
   const migrated = new DatabaseSync(path); const v5 = JSON.parse(migrated.prepare('SELECT payload FROM snapshot').get().payload); migrated.close();
-  assert.equal(v5.version, 5); assert.deepEqual(v5.positions, original.positions); assert.deepEqual(v5.events, original.events);
+  assert.equal(v5.version, 6); assert.deepEqual(v5.positions, original.positions); assert.deepEqual(v5.events, original.events);
 });
 test('transport sanitizes token URLs, API errors and Retry-After; never returns raw upstream descriptions', async () => {
   const token = '123456:DO_NOT_LEAK';

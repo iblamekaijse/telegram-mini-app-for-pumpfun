@@ -72,4 +72,4 @@ python3 web/positions-browser-check.py
 [Отчёт браузера](../results/positions-browser.json), [открытая позиция — компьютер](../results/positions-open-desktop.png), [телефон](../results/positions-open-mobile.png), [результат](../results/positions-closed-desktop.png). Отдельный [LIVE-отчёт](../results/positions-live-source.json) — один запрос чтения DEX Screener, без создания правил/позиций. Он проверяет доступность формата ответа, а не прохождение тестовых порогов в живом рынке.
 
 
-Текущий дополнительный интерфейс: [обычный Telegram-бот одного владельца](TELEGRAM.md). Существующая SQLite автоматически мигрирует в v5; перед обновлением остановите сервер и сохраните резервную копию по HANDOFF.md.
+Текущий дополнительный интерфейс: [обычный Telegram-бот одного владельца](TELEGRAM.md). Существующая SQLite автоматически мигрирует в v6; перед обновлением остановите сервер и сохраните резервную копию по HANDOFF.md.
