@@ -13,15 +13,16 @@ const fixture = JSON.parse(readFileSync(new URL('./fixtures/dexscreener-pumpswap
 
 async function harness(t, options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'paper-live-check-')); t.after(() => rmSync(root, { recursive: true, force: true }));
-  let now = 1_800_000_000_000, currentApp, apiId = 100, updateId = 500, aborted = false;
+  let now = 1_800_000_000_000, currentApp, appRunning = false, apiId = 100, updateId = 500, aborted = false;
   const config = { dataDir: join(root, 'data'), dbPath: join(root, 'data/state.sqlite'), port: 0, token: 'OFFLINE_SECRET_NOT_A_TOKEN', botId: '123456' };
   const seed = await createPanelService({ dataDir: config.dataDir, clock: () => now, marketFetch: async () => new Response(JSON.stringify([{ ...fixture[0], priceUsd: '0.0001' }])) });
   const tg = seed.telegram.load(); tg.botId = config.botId; tg.owner = { userId: '42', chatId: '42' }; tg.generation = 1; seed.telegram.save(tg);
   if (options.seed) await options.seed(seed, ms => { now += ms; });
   seed.close();
-  const updates = [], sends = [], calls = [], stages = [];
+  const updates = [], sends = [], calls = [], stages = [], marketTimes = [];
   let activePolls = 0, maxPolls = 0, polls = 0, starts = 0;
   const marketFetch = async () => {
+    marketTimes.push(now);
     if (options.outage) throw new Error('OFFLINE market outage');
     return new Response(JSON.stringify([{ ...fixture[0], priceUsd: options.price?.(now) ?? '0.0001' }]));
   };
@@ -52,13 +53,13 @@ async function harness(t, options = {}) {
   const args = { config, evidenceMode: 'test-transports', marketFetch, transport, signal: abort.signal,
     now: () => now, waitMs: 120_000, ownerWaitMs: 90_000, totalMs: 900_000, restartMs: 11_500,
     notify: s => { stages.push(s); if (options.interruptStage && s === `Проверка: ${options.interruptStage}` && !aborted) { aborted = true; abort.abort(); } },
-    start: async opts => { starts++; currentApp = await startPanel(opts); return currentApp; },
+    start: async opts => { starts++; currentApp = await startPanel(opts); appRunning = true; const close = currentApp.close; currentApp.close = async () => { await close(); appRunning = false; }; return currentApp; },
     sleep: async () => {
       now += 1000;
-      if (currentApp) { try { await currentApp.serial(() => currentApp.service.pollMarket()); } catch (e) { if (!/closed/i.test(e.message)) throw e; } }
+      if (appRunning) { try { await currentApp.serial(() => currentApp.service.pollMarket()); } catch (e) { if (!/closed/i.test(e.message)) throw e; } }
       await new Promise(r => setTimeout(r, 20));
     } };
-  return { config, args, calls, sends, stages, get starts() { return starts; }, get polls() { return polls; }, get maxPolls() { return maxPolls; },
+  return { config, args, calls, sends, stages, marketTimes, get starts() { return starts; }, get polls() { return polls; }, get maxPolls() { return maxPolls; },
     run: overrides => runLiveCheck({ ...args, ...overrides }), get now() { return now; }, advance: ms => { now += ms; } };
 }
 async function state(path) { const s = await inspectDatabase(path); try { return s.state; } finally { s.close(); } }
@@ -68,8 +69,10 @@ test('one real application worker with fake transports: entry, correlated owner 
   assert.equal(result.failure, undefined, result.report?.lastFailure?.reason);
   const r = result.report; assert.equal(r.status, 'completed'); assert.equal(r.evidenceMode, 'test-transports');
   assert.equal(r.userSawResult, 'unconfirmed'); assert.equal(r.stages.statusProcessed.updateId, 500);
-  assert.equal(r.stages.restartVerified.noNotificationReplay, true); assert.equal(r.actual.originalHistoryUnchanged, true);
+  assert.equal(r.stages.restartVerified.noNotificationReplay, true);
+  assert.ok(r.stages.restartVerified.atMs - r.stages.restartVerified.startedAtMs >= 11_500); assert.equal(r.actual.originalHistoryUnchanged, true);
   assert.equal(h.maxPolls, 1); assert.equal(h.starts, 2);
+  for (let i = 1; i < h.marketTimes.length; i++) assert.ok(h.marketTimes[i] - h.marketTimes[i - 1] >= 10_000, 'market cooldown must survive restart');
   assert.notEqual(r.stages.virtualEntry.entry.id, r.selection.id);
   assert.ok(r.stages.virtualClose.exit.observedAtMs > r.stages.virtualClose.request.requestedAtMs);
   const s = await state(h.config.dbPath); assert.equal(s.rules.length, 1); assert.equal(s.operations.length, 1); assert.equal(s.positions.length, 1);
@@ -175,6 +178,8 @@ test('new Node process reopens same SQLite, with .env preserved and no second su
   const report = JSON.parse(readFileSync(reportFile, 'utf8')), after = await state(h.config.dbPath);
   assert.equal(report.status, 'completed'); assert.equal(report.stages.restartVerified.processRestart, true);
   assert.notEqual(report.stages.restartVerified.previousProcessId, report.stages.restartVerified.processId);
+  assert.ok(report.stages.restartVerified.observation.observedAtMs >= before.marketCooldown.notBeforeMs);
+  assert.ok(report.stages.restartVerified.atMs - report.stages.restartVerified.startedAtMs >= 11_500);
   assert.equal(report.id, before.id); assert.deepEqual(after.rules, s.rules); assert.deepEqual(after.positions, s.positions); assert.deepEqual(after.operations, s.operations);
   assert.equal(fileChecksum(envFile), envHash);
   assert.equal(after.telegram.outbox.filter(e => e.id.endsWith(':open:' + s.positions[0][0])).length, 1);

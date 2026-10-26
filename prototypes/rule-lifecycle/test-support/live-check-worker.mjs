@@ -24,6 +24,6 @@ const transport = { async call(method, body) {
 const result = await runLiveCheck({ config, evidenceMode: 'test-transports', processRestart: true, transport,
   marketFetch: async () => new Response(JSON.stringify([{ ...fixture[0], priceUsd: '0.0001' }])),
   start: async opts => { app = await startPanel(opts); return app; }, now: () => now,
-  sleep: async () => { now += 1000; await app.serial(() => app.service.pollMarket()); await new Promise(r => setTimeout(r, 20)); }, notify: () => {} });
+  sleep: async () => { now += 1000; if (app) await app.serial(() => app.service.pollMarket()); await new Promise(r => setTimeout(r, 20)); }, notify: () => {} });
 console.log(JSON.stringify({ status: result.report.status, restartRequired: result.restartRequired ?? false, code: result.failure?.code }));
 process.exitCode = result.failure ? 1 : result.restartRequired ? 75 : 0;

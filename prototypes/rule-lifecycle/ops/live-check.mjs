@@ -89,7 +89,7 @@ export async function runLiveCheck({ config, mint, signal, evidenceMode = 'live'
     } else {
       blockers(initial);
       const t = initial.telegram;
-      if (!t.owner || t.owner.userId !== t.owner.chatId) fail('OWNER_REQUIRED', 'Нужен уже привязанный личный чат владельца. Прогон никого не привязывает.');
+      if (!t.owner || t.owner.userId !== t.owner.chatId) fail('OWNER_REQUIRED', 'Личный чат ещё не привязан. Запустите npm start, в локальной панели получите код привязки и отправьте /start КОД своему боту. Затем остановите сервер и повторите live:check; setup не нужен.');
       if (t.botId !== config.botId) fail('BOT_CONFIG_MISMATCH', 'ID бота в конфигурации и базе не совпадают.');
       if (t.outbox.some(e => e.status === 'pending')) fail('QUEUE_BUSY', 'Есть прежняя очередь уведомлений; прогон не меняет и не сбрасывает её.');
       const keys = Object.fromEntries(businessTables.map(table => [table, initial[table].map(entry => tableKey(table, entry))]));
@@ -137,9 +137,26 @@ export async function runLiveCheck({ config, mint, signal, evidenceMode = 'live'
       }
       return result;
     } };
+    const persistCooldown = (notBeforeMs, uncertain) => {
+      report.marketCooldown = { notBeforeMs, uncertain }; save();
+    };
+    const checkedMarketFetch = async (...args) => {
+      // A crash during I/O must not turn a restart into a way around provider backoff.
+      // The ordinary market state supplies the exact deadline once the poll is committed.
+      persistCooldown(now() + 8000 + 120_000, true);
+      const response = await marketFetch(...args);
+      if (response.status === 429) {
+        const value = response.headers.get('retry-after');
+        const retryMs = /^\d+$/.test(value ?? '') ? Number(value) * 1000 : Date.parse(value) - now();
+        persistCooldown(Math.max(report.marketCooldown.notBeforeMs, now() + (Number.isFinite(retryMs) ? retryMs : 0)), true);
+      }
+      return response;
+    };
     const launch = async () => {
-      guard(); app = await start({ dataDir: config.dataDir, port: config.port, telegramTransport: wrapped,
-        marketFetch, clock: now, expectedBotId: config.botId, beforeWorkers(service) {
+      if (now() < (report.marketCooldown?.notBeforeMs ?? 0)) notify('Ожидание сохранённого интервала рынка перед запуском.');
+      while (now() < (report.marketCooldown?.notBeforeMs ?? 0)) { guard(); await sleep(500); }
+      guard(); const launchedAt = now(); app = await start({ dataDir: config.dataDir, port: config.port, telegramTransport: wrapped,
+        marketFetch: checkedMarketFetch, clock: now, expectedBotId: config.botId, beforeWorkers(service) {
           checkOwner(service.telegram.load());
           const s = service.state();
           for (const r of s.rules) if (r.config.id !== report.ruleId && (!report.protectedKeys.rules.includes(r.config.id) || !terminal(r)))
@@ -151,11 +168,15 @@ export async function runLiveCheck({ config, mint, signal, evidenceMode = 'live'
       const d = await response.json();
       if (!response.ok || resolve(d.dbPath) !== resolve(config.dbPath) || d.storage.schemaVersion !== 7) fail('APP_UNAVAILABLE', 'Локальная диагностика не соответствует выбранной SQLite.');
       mark('application', { schemaVersion: d.storage.schemaVersion });
+      return launchedAt;
     };
     const view = () => app.serial(() => {
       guard();
       const t = app.service.telegram.load(); checkOwner(t);
       const s = app.service.state();
+      if (s.market.lastAttemptAtMs !== null && s.market.pollStatus !== 'loading' &&
+        (report.marketCooldown?.notBeforeMs !== s.market.nextPollAtMs || report.marketCooldown?.uncertain))
+        persistCooldown(s.market.nextPollAtMs, false);
       if (s.rules.some(r => r.config.id !== report.ruleId && !report.protectedKeys.rules.includes(r.config.id))) fail('CURRENT_RULE_CHANGED', 'Во время проверки появилось другое правило.');
       return { s, t };
     });
@@ -182,8 +203,7 @@ export async function runLiveCheck({ config, mint, signal, evidenceMode = 'live'
       if (e?.status === 'failed' || e?.status === 'cancelled') fail('MESSAGE_NOT_SENT', `API не подтвердил отправку ${id}; очередь сохранена, лимит попыток не сброшен.`);
       return e?.status === 'sent' && { apiAccepted: true, attempts: e.attempts };
     });
-    const initialLaunchAt = now();
-    await launch();
+    const initialLaunchAt = await launch();
     await wait('идентичность и webhook', ({ s }) => s.telegram.identityVerified);
     mark('identityVerified');
     let v = await view();
@@ -263,14 +283,13 @@ export async function runLiveCheck({ config, mint, signal, evidenceMode = 'live'
       restartAt = initialLaunchAt;
     } else {
       await app.close(); app = null;
-      restartAt = now();
-      await launch(); await wait('идентичность после перезапуска', ({ s }) => s.telegram.identityVerified);
+      restartAt = await launch(); await wait('идентичность после перезапуска', ({ s }) => s.telegram.identityVerified);
     }
     await wait('новый рыночный снимок после перезапуска', ({ s }) => s.market.snapshotUsable && s.market.snapshot.observedAtMs >= restartAt, waitMs);
     while (now() - restartAt < restartMs) { guard(); await sleep(500); }
     const after = await view();
     if (digest(invariant(after)) !== report.restartBaseline) fail('RESTART_DUPLICATE', 'После перезапуска изменился результат, число операций или отправок уведомлений.');
-    mark('restartVerified', { observation: snapshot(after.s.market.snapshot), processRestart, previousProcessId: report.restartPending?.previousProcessId ?? null, processId: process.pid, sameResult: true, sameOperations: true, noNotificationReplay: true });
+    mark('restartVerified', { startedAtMs: restartAt, observation: snapshot(after.s.market.snapshot), processRestart, previousProcessId: report.restartPending?.previousProcessId ?? null, processId: process.pid, sameResult: true, sameOperations: true, noNotificationReplay: true });
     await enqueue('result', `ПРОВЕРКА ${report.id} завершена: ${report.ruleId}, позиция ${p.id}.\nВход, команда /status, виртуальное закрытие и сохранность после перезапуска проверены.\nРасчётный результат: ${closed.display.pnlUsd} USD (${closed.display.pnlPercent}%).\nПросмотр человеком автоматически не подтверждается. Локальный report.json содержит этапы без переписки и токена.`);
     mark('resultMessageApiAccepted', await sent(`${report.id}:result`));
     await app.close(); app = null;

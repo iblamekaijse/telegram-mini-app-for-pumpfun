@@ -14,4 +14,4 @@
 
 [Telegram](prototypes/rule-lifecycle/web/TELEGRAM.md) · [Рыночные ограничения](prototypes/rule-lifecycle/web/MARKET_DATA.md) · [Виртуальные позиции](prototypes/rule-lifecycle/web/VIRTUAL_POSITIONS.md) · [Проверки](prototypes/rule-lifecycle/VALIDATION.md) · [Бриф и история проекта](PROJECT_BRIEF.md).
 
-Следующий интеграционный этап (новая ветка `codex/live-integration-run`, без автоматического слияния): [один живой прогон в WSL](prototypes/rule-lifecycle/LIVE_CHECK.md). Cloud подтвердил доступ к настоящему рыночному API; Telegram/WSL проверены только на тестовых транспортах до запуска владельцем. Тег выпуска не изменён.
+Инструмент интеграционного прогона включён в **main** через PR №4: [один живой прогон в WSL](prototypes/rule-lifecycle/LIVE_CHECK.md). Cloud подтвердил доступ к настоящему рыночному API; Telegram/WSL проверены только на тестовых транспортах до запуска владельцем. Тег выпуска не изменён.
