@@ -4,6 +4,7 @@ import { emptySnapshot, validateSnapshot } from './state-schema.mjs';
 import { canonical, priceBasisValid, sourceIdValid, sourceEventValid, samePriceBasis } from './event-contract.mjs';
 import { authorizedDemoPrincipal } from './demo-owner.mjs';
 import { SyntheticSource } from './synthetic-source.mjs';
+import { assetValid, marketBindingValid, marketSnapshotValid, MARKET_PRICE_BASIS } from './market-contract.mjs';
 
 export const LIVE_TRADING_ALLOWED = false;
 const terminalRules = new Set(['finished', 'expired', 'revoked']);
@@ -17,7 +18,7 @@ function requireValue(condition, code) {
 }
 function integer(value, min = 0) { return Number.isSafeInteger(value) && value >= min; }
 function identifier(value) { return typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 128; }
-function asset(value) { return identifier(value) && value.startsWith('DEMO:') && value.length > 5; }
+function asset(value) { return identifier(value) && assetValid(value); }
 function frozenCopy(value) {
   function freeze(object) {
     if (object && typeof object === 'object') {
@@ -204,6 +205,8 @@ export class RuleEngine {
     return this.#once(requestId, { action: 'create', config }, () => {
       const now = this.#now();
       requireValue(config && identifier(config.id) && asset(config.assetId), 'INVALID_ID_OR_ASSET');
+      requireValue(config.assetId.startsWith('DEMO:') ? !config.market : marketBindingValid(config.market) &&
+        config.assetId === `SOLANA:${config.market.mint}` && canonical(config.condition?.priceBasis) === canonical(MARKET_PRICE_BASIS), 'INVALID_MARKET_BINDING');
       requireValue(config.condition?.metric === 'priceUnits' &&
         config.condition.operator === 'lte' && integer(config.condition.thresholdUnits, 1), 'INVALID_CONDITION');
       if (config.condition.priceBasis !== undefined) requireValue(priceBasisValid(config.condition.priceBasis), 'INVALID_PRICE_BASIS');
@@ -258,6 +261,7 @@ export class RuleEngine {
 
   receiveEvent(ruleId, event) {
     const rule = this.#rule(ruleId), now = this.#now();
+    requireValue(!rule.config.market, 'MARKET_SNAPSHOT_REQUIRED');
     requireValue(!this.#streams.has(ruleId), 'SOURCE_CONTRACT_REQUIRED');
     this.#refresh(rule, now);
     requireValue(event && identifier(event.id) && event.type === 'synthetic-price' &&
@@ -271,6 +275,29 @@ export class RuleEngine {
     const result = frozenCopy(this.#evaluateEvent(rule, event, now));
     this.#events.set(key, { fingerprint, result });
     this.#checkpoint();
+    if (result.disposition === 'prepared') this.#faultInjector('after_prepared_commit');
+    return result;
+  }
+
+  receiveMarketSnapshot(ruleId, event) {
+    const rule = this.#rule(ruleId), now = this.#now(), binding = rule.config.market;
+    requireValue(marketBindingValid(binding) && !this.#streams.has(ruleId), 'MARKET_SNAPSHOT_REQUIRED');
+    requireValue(marketSnapshotValid(event), 'INVALID_MARKET_SNAPSHOT');
+    requireValue(['provider', 'chainId', 'dexId', 'mint', 'pairAddress', 'quoteMint', 'priceField'].every(k => event[k] === binding[k]) &&
+      samePriceBasis(event.priceBasis, rule.config.condition.priceBasis), 'MARKET_BINDING_MISMATCH');
+    this.#refresh(rule, now);
+    const key = JSON.stringify([ruleId, event.id]), fingerprint = canonical(event), prior = this.#events.get(key);
+    if (prior) {
+      requireValue(prior.fingerprint === fingerprint, 'EVENT_ID_CONFLICT');
+      return frozenCopy({ ...prior.result, duplicate: true });
+    }
+    const previous = [...this.#events.values()].filter(e => e.ruleId === ruleId && e.marketSnapshot &&
+      !['ignored_future', 'ignored_stale', 'ignored_out_of_order'].includes(e.result.disposition)).at(-1)?.marketSnapshot;
+    const result = frozenCopy(event.receivedAtMs > now ? { disposition: 'ignored_future' }
+      : previous && event.observedAtMs < previous.observedAtMs ? { disposition: 'ignored_out_of_order' }
+      : this.#evaluateEvent(rule, event, now));
+    this.#events.set(key, { fingerprint, ruleId, marketSnapshot: frozenCopy(event), result });
+    this.#checkpoint(); // Observation and execution intent are committed together.
     if (result.disposition === 'prepared') this.#faultInjector('after_prepared_commit');
     return result;
   }
@@ -294,6 +321,7 @@ export class RuleEngine {
 
   bindSource(ruleId, { sourceId } = {}, { requestId } = {}) {
     const rule = this.#rule(ruleId);
+    requireValue(!rule.config.market, 'SNAPSHOT_HAS_NO_RECOVERY_CURSOR');
     this.#refresh(rule, this.#now());
     return this.#once(requestId, { action: 'bindSource', ruleId, sourceId }, () => {
       requireValue(sourceIdValid(sourceId), 'INVALID_SOURCE');

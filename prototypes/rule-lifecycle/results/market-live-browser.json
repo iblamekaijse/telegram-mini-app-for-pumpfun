@@ -1,0 +1,15 @@
+{
+  "mode": "LIVE PUBLIC API, VIRTUAL OPERATIONS ONLY",
+  "source": "DEX Screener token-pairs/v1/solana",
+  "mint": "HnXDnwTa68tRhLRZdJkVRLAeYrUkCYgFgDavtwD1pump",
+  "checks": [
+    "mint_validation_pool_quote_and_source_visible",
+    "current_rule_banner_and_explicit_virtual_result_after_background_trigger",
+    "reload_derives_same_completed_banner_and_operation_result",
+    "ui_create_enable_new_snapshot_virtual_result_reload",
+    "live_server_SIGKILL_restart_same_virtual_operation_no_repeat",
+    "desktop_and_mobile_without_horizontal_overflow"
+  ],
+  "pageErrors": [],
+  "result": "passed"
+}
