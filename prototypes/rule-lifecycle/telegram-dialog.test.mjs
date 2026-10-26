@@ -106,7 +106,7 @@ test('v5 snapshot migrates binding, processed updates, queue, rules and position
   const c=await setup(t);await c.review();c.click(c.callback('confirm'));c.click(c.callback('enable'));await c.poll('100');c.message('/status');const saved=c.bot.load();
   // Close the engine before writing a faithful previous-version fixture.
   c.s.close();const db=new DatabaseSync(join(c.dataDir,'state.sqlite'));
-  const state=JSON.parse(db.prepare('SELECT payload FROM snapshot').get().payload);state.version=5;state.telegram.version=1;delete state.telegram.dialog;
+  const state=JSON.parse(db.prepare('SELECT payload FROM snapshot').get().payload);state.version=5;state.telegram.version=1;delete state.telegram.dialog;delete state.telegram.botId;
   const payload=JSON.stringify(state);db.prepare('UPDATE snapshot SET payload=?,sha256=?').run(payload,createHash('sha256').update(payload).digest('hex'));db.close();
   const reopened=await createPanelService(c.options);assert.deepEqual(reopened.telegram.load(),saved);assert.equal(reopened.state().positions[0].status,'open');assert.equal(reopened.state().rules[0].operations.length,1);reopened.close();
 });

@@ -1,0 +1,7 @@
+{
+  "mode": "Linux pseudo-terminal, fake token only",
+  "result": "passed",
+  "echoHidden": true,
+  "inputReceivedCorrectly": true,
+  "processExit": 0
+}

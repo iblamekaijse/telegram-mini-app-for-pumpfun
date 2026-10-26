@@ -123,7 +123,7 @@ export class RuleEngine {
 
   #snapshot() {
     return {
-      version: 6, telegram: this.#telegram, positions: [...this.#positions], nextOperation: this.#nextOperation, nextIncident: this.#nextIncident,
+      version: 7, telegram: this.#telegram, positions: [...this.#positions], nextOperation: this.#nextOperation, nextIncident: this.#nextIncident,
       rules: [...this.#rules], operations: [...this.#operations],
       commands: [...this.#commands], events: [...this.#events],
       streams: [...this.#streams],
@@ -135,6 +135,12 @@ export class RuleEngine {
     this.#healthy();
     try { this.#store?.save(this.#snapshot(), { beforeCommit }); }
     catch (error) { this.#storageFailure = error; throw error; }
+  }
+
+  operationalSummary() {
+    this.#healthy();
+    return { schemaVersion: 7, botId: this.#telegram.botId, rules: this.#rules.size,
+      positions: this.#positions.size, ownerLinked: !!this.#telegram.owner };
   }
 
   getTelegramState() { this.#healthy(); return structuredClone(this.#telegram); }

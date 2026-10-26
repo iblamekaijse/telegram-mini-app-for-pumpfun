@@ -160,7 +160,7 @@ test('v3 SQLite migrates losslessly without converting legacy rules into positio
   const payload = JSON.stringify(saved); db.prepare('UPDATE snapshot SET payload=?,sha256=?').run(payload, createHash('sha256').update(payload).digest('hex')); db.close();
   const restored = await createPanelService(c.options); assert.equal(restored.state().rules[0].state, 'revoked'); assert.deepEqual(restored.state().positions, []); restored.close();
   const raw = new DatabaseSync(storagePath), upgraded = JSON.parse(raw.prepare('SELECT payload FROM snapshot').get().payload); raw.close();
-  assert.deepEqual(upgraded, { ...saved, version: 6, positions: [], telegram: emptyTelegramState() });
+  assert.deepEqual(upgraded, { ...saved, version: 7, positions: [], telegram: emptyTelegramState() });
 });
 
 test('explicit condition-only scenario never creates a position, even with TP/SL form values present', async t => {

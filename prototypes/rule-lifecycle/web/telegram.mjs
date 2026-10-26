@@ -1,3 +1,4 @@
+import { bindBotIdentity, botIdentity } from '../telegram-identity.mjs';
 import { canRevokeRule, handleRevocation } from './telegram-revoke.mjs';
 import { TelegramDialog } from './telegram-dialog.mjs';
 import { createHash, randomBytes } from 'node:crypto';
@@ -10,8 +11,9 @@ const identity = value => Number.isSafeInteger(value) && value > 0;
 
 /** Durable single-owner adapter. All methods except transport calls run on the panel command queue. */
 export class TelegramController {
-  constructor({ engine, view, command, closePosition, create, validateField, beginMarketSelect, finishMarketSelect, clock = Date.now, configured = false }) {
+  constructor({ engine, view, command, closePosition, create, validateField, beginMarketSelect, finishMarketSelect, clock = Date.now, configured = false, requireIdentity = false }) {
     Object.assign(this, { engine, view, command, closePosition, create, validateField, beginMarketSelect, finishMarketSelect, clock, configured });
+    this.requireIdentity = requireIdentity; this.identityVerified = !requireIdentity;
     this.dialog = new TelegramDialog(this);
     this.connection = configured ? 'connecting' : 'disabled'; this.lastError = null;
   }
@@ -19,12 +21,18 @@ export class TelegramController {
   save(t) { this.engine.saveTelegramState(t); }
   status() {
     const t = this.load();
-    return { configured: this.configured, connection: this.connection, lastError: this.lastError, linked: !!t.owner,
+    return { identityVerified: this.identityVerified, botId: t.botId, configured: this.configured, connection: this.connection, lastError: this.lastError, linked: !!t.owner,
       codeExpiresAtMs: t.code?.expiresAtMs ?? null,
       queued: t.outbox.filter(e => e.status === 'pending').length, failed: t.outbox.filter(e => e.status === 'failed').length };
   }
+  acceptBot(id) {
+    const state = this.load(), next = bindBotIdentity(state, id);
+    if (state.botId !== next.botId) this.save(next);
+    this.identityVerified = true;
+  }
   createCode() {
     if (!this.configured) throw Object.assign(new Error('Telegram не настроен: задайте TELEGRAM_BOT_TOKEN локально.'), { code: 'TELEGRAM_NOT_CONFIGURED' });
+    if (this.requireIdentity && !this.identityVerified) throw Object.assign(new Error('Сначала дождитесь проверки ID бота; выполните npm run doctor при ошибке.'), { code: 'BOT_IDENTITY_REQUIRED' });
     const t = this.load();
     if (t.owner) throw Object.assign(new Error('Сначала отключите прежнюю привязку.'), { code: 'TELEGRAM_ALREADY_LINKED' });
     const code = random(); t.code = { hash: hash(code), expiresAtMs: this.clock() + 300_000 }; this.save(t);
@@ -192,14 +200,22 @@ export class TelegramTransport {
 }
 
 /** Poll and delivery have separate async loops, neither holds the panel serializer across network I/O. */
-export function runTelegram({ controller: c, transport, serial }) {
+export function runTelegram({ controller: c, transport, serial, expectedBotId = '' }) {
+  let identityReady = false;
   const abort = new AbortController(); let stopped = false, pollBusy = false, sendBusy = false, sourceBusy = false, pollAt = 0, sendAt = 0, failures = 0;
-  const connection = error => { c.connection = error ? [401, 403].includes(error.status) ? 'token_error' : error.status === 409 ? 'conflict' : 'retrying' : 'connected'; c.lastError = error ? safeCode(error) : null; };
+  const connection = error => { c.connection = error ? error.code?.startsWith('BOT_') || error.code === 'TELEGRAM_WEBHOOK' ? 'identity_error' : [401, 403].includes(error.status) ? 'token_error' : error.status === 409 ? 'conflict' : 'retrying' : 'connected'; c.lastError = error ? error.code?.startsWith('BOT_') || error.code === 'TELEGRAM_WEBHOOK' ? error.code : safeCode(error) : null; };
   const delay = e => Math.max(e.retryAfter ? e.retryAfter * 1000 : 0, e.status === 409 ? 30_000 : Math.min(60_000, 1000 * 2 ** Math.min(++failures, 6)));
   async function poll() {
     if (stopped || pollBusy || Date.now() < pollAt) return;
     pollBusy = true;
     try {
+      if (!identityReady) {
+        const id = botIdentity(await transport.call('getMe', {}, abort.signal));
+        if (expectedBotId && expectedBotId !== id) throw Object.assign(new Error('ID бота не соответствует конфигурации.'), { code: 'BOT_CONFIG_MISMATCH' });
+        const webhook = await transport.call('getWebhookInfo', {}, abort.signal);
+        if (webhook?.url) throw Object.assign(new Error('Активен webhook.'), { code: 'TELEGRAM_WEBHOOK' });
+        await serial(() => c.acceptBot(id)); identityReady = true;
+      }
       const offset = await serial(() => { c.resume(); return c.load().offset; });
       const updates = await transport.call('getUpdates', { offset, timeout: 25, allowed_updates: ['message', 'callback_query'] }, abort.signal);
       if (!Array.isArray(updates)) throw new Error('INVALID_UPDATES');
@@ -212,7 +228,7 @@ export function runTelegram({ controller: c, transport, serial }) {
     finally { pollBusy = false; }
   }
   async function send() {
-    if (stopped || sendBusy || Date.now() < sendAt) return;
+    if (stopped || !identityReady || sendBusy || Date.now() < sendAt) return;
     sendBusy = true;
     try {
       const e = await serial(() => { c.reconcile(); return c.prepareDelivery(); });
@@ -226,7 +242,7 @@ export function runTelegram({ controller: c, transport, serial }) {
     finally { sendBusy = false; }
   }
   async function source() {
-    if (stopped || sourceBusy) return;
+    if (stopped || !identityReady || sourceBusy) return;
     sourceBusy = true;
     try {
       const job = await serial(() => c.dialog.beginSource());

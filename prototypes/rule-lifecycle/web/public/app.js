@@ -344,9 +344,9 @@ load(); setInterval(() => { if (!busy) load(); }, 2000);
 
 function renderTelegram() {
   const t = model?.telegram; if (!t) return;
-  const states = { disabled: 'Не настроен: добавьте TELEGRAM_BOT_TOKEN в локальный .env по инструкции', connecting: 'Подключение…', connected: 'Соединение работает', retrying: 'Telegram недоступен; повторим подключение', token_error: 'Ошибка доступа к боту: проверьте токен и права', conflict: 'Другой экземпляр получает updates: остановите его', storage_error: 'Ошибка хранения Telegram: действия остановлены' };
+  const states = { identity_error: 'Telegram остановлен: проверьте ID бота или webhook через npm run doctor/setup', disabled: 'Не настроен: добавьте TELEGRAM_BOT_TOKEN в локальный .env по инструкции', connecting: 'Подключение…', connected: 'Соединение работает', retrying: 'Telegram недоступен; повторим подключение', token_error: 'Ошибка доступа к боту: проверьте токен и права', conflict: 'Другой экземпляр получает updates: остановите его', storage_error: 'Ошибка хранения Telegram: действия остановлены' };
   $('telegram-status').textContent = `${states[t.connection] ?? t.connection}. ${t.linked ? 'Владелец привязан' : 'Владелец не привязан'}. В очереди: ${t.queued}; не доставлено: ${t.failed}.`;
-  $('telegram-code').disabled = busy || !connected || !t.configured || t.linked;
+  $('telegram-code').disabled = busy || !connected || !t.configured || t.identityVerified === false || t.linked;
   $('telegram-unlink').disabled = busy || !connected || !t.linked && !t.codeExpiresAtMs;
   if (t.linked || !t.codeExpiresAtMs || t.codeExpiresAtMs <= model.now) $('telegram-link').textContent = '';
   if (model.telegramLink) $('telegram-link').textContent = `В личном чате своего бота отправьте /start ${model.telegramLink.code} (до ${time(model.telegramLink.expiresAtMs)}). Код одноразовый; не передавайте его другим.`;

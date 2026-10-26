@@ -1,0 +1,12 @@
+{
+  "mode": "actual npm CLI, no Telegram token, temporary files",
+  "result": "passed",
+  "checks": [
+    "npm_start_reads_custom_env_data_path_noninteractive",
+    "doctor_reads_running_panel",
+    "backup_rejects_running_app",
+    "setup_without_token_refuses_noninteractive_without_changes",
+    "stopped_backup_and_new_directory_restore"
+  ],
+  "liveTelegram": false
+}

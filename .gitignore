@@ -10,3 +10,6 @@ __pycache__/
 *.db
 *.db-*
 *.log
+
+# Secret configuration in local backup archives.
+configuration.env

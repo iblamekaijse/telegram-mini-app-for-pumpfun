@@ -1,11 +1,12 @@
 import { marketBindingValid } from './market-contract.mjs';
 import assert from 'node:assert/strict';
-export const emptyTelegramState = () => ({ version: 2, dialog: null, generation: 0, owner: null, code: null, offset: 0,
+export const emptyTelegramState = () => ({ version: 3, botId: null, dialog: null, generation: 0, owner: null, code: null, offset: 0,
   pending: null, callbacks: [], seen: [], market: null, marketSequence: 0, outbox: [] });
 export function validateTelegramState(t) {
   const n = v => Number.isSafeInteger(v) && v >= 0;
   const identity = v => typeof v === 'string' && /^[1-9][0-9]{0,15}$/.test(v);
-  assert(t?.version === 2 && n(t.generation) && n(t.offset) && n(t.marketSequence));
+  assert(t?.version === 3 && n(t.generation) && n(t.offset) && n(t.marketSequence));
+  assert(t.botId === null || identity(t.botId));
   assert(t.owner === null || identity(t.owner.userId) && identity(t.owner.chatId));
   assert(t.code === null || /^[a-f0-9]{64}$/.test(t.code.hash) && n(t.code.expiresAtMs));
   assert(t.pending === null || n(t.pending.update_id) && t.pending.update_id >= t.offset);

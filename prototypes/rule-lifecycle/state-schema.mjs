@@ -5,7 +5,7 @@ import { assetValid, marketBindingValid, marketSnapshotValid, MARKET_PRICE_BASIS
 
 import { positionPolicyValid, positionValues, exitReason, sameBinding, sameExact } from './position-model.mjs';
 
-export const emptySnapshot = () => ({ version: 6, telegram: emptyTelegramState(), positions: [], nextOperation: 1, nextIncident: 1, sourceDecisions: [], rules: [], operations: [], commands: [], events: [], streams: [] });
+export const emptySnapshot = () => ({ version: 7, telegram: emptyTelegramState(), positions: [], nextOperation: 1, nextIncident: 1, sourceDecisions: [], rules: [], operations: [], commands: [], events: [], streams: [] });
 const integer = (v, min = 0) => Number.isSafeInteger(v) && v >= min;
 const id = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && v.trim() === v;
 const asset = v => id(v) && assetValid(v);
@@ -32,7 +32,7 @@ function event(e) {
 
 /** Versioned format and cross-references; not authentication against a malicious file owner. */
 export function validateSnapshot(state) {
-  assert([1, 2, 3, 4, 5, 6].includes(state?.version));
+  assert([1, 2, 3, 4, 5, 6, 7].includes(state?.version));
   if (state.version === 1) {
     assert(!Object.hasOwn(state, 'streams'));
     state = { ...state, version: 2, streams: [] }; // Lossless v1 upgrade; no source is inferred.
@@ -51,11 +51,15 @@ export function validateSnapshot(state) {
   }
   if (state.version === 4) {
     assert(!Object.hasOwn(state, 'telegram'));
-    state = { ...state, version: 6, telegram: emptyTelegramState() };
+    state = { ...state, version: 7, telegram: emptyTelegramState() };
   }
   if (state.version === 5) {
     assert(state.telegram?.version === 1 && !Object.hasOwn(state.telegram, 'dialog'));
-    state = { ...state, version: 6, telegram: { ...state.telegram, version: 2, dialog: null } };
+    state = { ...state, version: 7, telegram: { ...state.telegram, version: 3, botId: null, dialog: null } };
+  }
+  if (state.version === 6) {
+    assert(state.telegram?.version === 2 && !Object.hasOwn(state.telegram, 'botId'));
+    state = { ...state, version: 7, telegram: { ...state.telegram, version: 3, botId: null } };
   }
   validateTelegramState(state.telegram);
   const positions = pairs(state.positions);

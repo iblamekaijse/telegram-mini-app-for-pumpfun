@@ -142,7 +142,7 @@ test('v4 SQLite upgrades without discarding rule/position history', async t => {
   assert.equal(restored.state().positions[0].status, 'open'); assert.equal(restored.state().rules[0].config.id, id);
   assert.equal(restored.telegram.status().linked, false); restored.close();
   const migrated = new DatabaseSync(path); const v5 = JSON.parse(migrated.prepare('SELECT payload FROM snapshot').get().payload); migrated.close();
-  assert.equal(v5.version, 6); assert.deepEqual(v5.positions, original.positions); assert.deepEqual(v5.events, original.events);
+  assert.equal(v5.version, 7); assert.deepEqual(v5.positions, original.positions); assert.deepEqual(v5.events, original.events);
 });
 test('transport sanitizes token URLs, API errors and Retry-After; never returns raw upstream descriptions', async () => {
   const token = '123456:DO_NOT_LEAK';
@@ -155,6 +155,8 @@ test('HTTP panel stays responsive while Telegram long polling and sending are pe
   const root = mkdtempSync(join(tmpdir(), 'telegram-http-')); t.after(() => rmSync(root, { recursive: true, force: true }));
   let polling = false;
   const app = await startPanel({ dataDir: join(root, 'data'), port: 0, telegramToken: '', telegramTransport: { call: (method, body, signal) => {
+    if(method==='getMe')return Promise.resolve({id:777000,is_bot:true});
+    if(method==='getWebhookInfo')return Promise.resolve({url:''});
     polling = true; return new Promise((resolve, reject) => { signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }); });
   } } });
   try {

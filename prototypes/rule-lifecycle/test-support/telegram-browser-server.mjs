@@ -7,6 +7,8 @@ const initial = JSON.parse(process.argv[3] ?? '{}');
 let now = initial.now ?? 1800000000000, priceUsd = initial.priceUsd ?? '120', updateId = initial.updateId ?? 0;
 const updates = [], sent = [];
 const transport = { async call(method, body, signal) {
+  if (method === 'getMe') return { id: 777000, is_bot: true, username: 'test_bot' };
+  if (method === 'getWebhookInfo') return { url: '' };
   if (method === 'getUpdates') {
     await new Promise((resolve, reject) => {
       const timer = setTimeout(done, 80);

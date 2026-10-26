@@ -57,7 +57,7 @@ export function positionField(field, value) {
 }
 
 /** Thin local UI adapter. All rule/operation decisions remain in RuleEngine. */
-export async function createPanelService({ dataDir, clock = Date.now, marketFetch = fetch, telegramConfigured = false }) {
+export async function createPanelService({ dataDir, clock = Date.now, marketFetch = fetch, telegramConfigured = false, deferTelegramResume = false }) {
   let initialize = false;
   try { mkdirSync(dataDir); initialize = true; }
   catch (error) { if (error.code !== 'EEXIST') throw error; }
@@ -244,11 +244,12 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     return { promise: work.then(result => ({ ...result, entryEpoch: epoch })) };
   };
   const closePosition = (id, body) => { engine.requestPositionClose(id, { requestId: `close:${requestKey(body.requestId)}` }); return state(); };
-  telegram = new TelegramController({ engine, view: state, command, closePosition, create, validateField: positionField, beginMarketSelect, finishMarketSelect, clock, configured: telegramConfigured });
-  telegram.resume();
+  telegram = new TelegramController({ engine, view: state, command, closePosition, create, validateField: positionField, beginMarketSelect, finishMarketSelect, clock, configured: telegramConfigured, requireIdentity: deferTelegramResume });
+  if (!deferTelegramResume) telegram.resume();
   const sync = fn => (...args) => { try { return fn(...args); } finally { telegram.reconcile(); } };
   const asyncSync = fn => async (...args) => { try { return await fn(...args); } finally { telegram.reconcile(); } };
-  return { state, telegram, beginMarketSelect, beginMarketPoll, finishMarketSelect: asyncSync(finishMarketSelect), finishMarket: asyncSync(recordMarket), create: sync(create), price: asyncSync(price), command: sync(command), selectMarket: asyncSync(selectMarket),
+  return { state, telegram, diagnostics: () => ({ storage: engine.operationalSummary(), telegram: telegram.status(),
+    market: ((m) => ({ status: m.status, snapshotUsable: m.snapshotUsable, error: m.error, lastSuccessAtMs: m.lastSuccessAtMs }))(market.state()) }), beginMarketSelect, beginMarketPoll, finishMarketSelect: asyncSync(finishMarketSelect), finishMarket: asyncSync(recordMarket), create: sync(create), price: asyncSync(price), command: sync(command), selectMarket: asyncSync(selectMarket),
     closePosition: sync(closePosition),
     pollMarket: asyncSync(async () => recordMarket(await beginMarketPoll().promise)),
     close: () => engine.close() };
