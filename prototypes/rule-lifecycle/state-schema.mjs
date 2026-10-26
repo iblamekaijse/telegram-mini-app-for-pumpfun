@@ -1,10 +1,11 @@
+import { emptyTelegramState, validateTelegramState } from './telegram-state.mjs';
 import assert from 'node:assert/strict';
 import { canonical, priceBasisValid, sourceIdValid, sourceEventValid } from './event-contract.mjs';
 import { assetValid, marketBindingValid, marketSnapshotValid, MARKET_PRICE_BASIS } from './market-contract.mjs';
 
 import { positionPolicyValid, positionValues, exitReason, sameBinding, sameExact } from './position-model.mjs';
 
-export const emptySnapshot = () => ({ version: 4, positions: [], nextOperation: 1, nextIncident: 1, sourceDecisions: [], rules: [], operations: [], commands: [], events: [], streams: [] });
+export const emptySnapshot = () => ({ version: 5, telegram: emptyTelegramState(), positions: [], nextOperation: 1, nextIncident: 1, sourceDecisions: [], rules: [], operations: [], commands: [], events: [], streams: [] });
 const integer = (v, min = 0) => Number.isSafeInteger(v) && v >= min;
 const id = v => typeof v === 'string' && v.length > 0 && v.length <= 128 && v.trim() === v;
 const asset = v => id(v) && assetValid(v);
@@ -31,7 +32,7 @@ function event(e) {
 
 /** Versioned format and cross-references; not authentication against a malicious file owner. */
 export function validateSnapshot(state) {
-  assert([1, 2, 3, 4].includes(state?.version));
+  assert([1, 2, 3, 4, 5].includes(state?.version));
   if (state.version === 1) {
     assert(!Object.hasOwn(state, 'streams'));
     state = { ...state, version: 2, streams: [] }; // Lossless v1 upgrade; no source is inferred.
@@ -48,6 +49,11 @@ export function validateSnapshot(state) {
     assert(!Object.hasOwn(state, 'positions'));
     state = { ...state, version: 4, positions: [] }; // Old rules never become positions.
   }
+  if (state.version === 4) {
+    assert(!Object.hasOwn(state, 'telegram'));
+    state = { ...state, version: 5, telegram: emptyTelegramState() };
+  }
+  validateTelegramState(state.telegram);
   const positions = pairs(state.positions);
   assert(integer(state.nextOperation, 1));
   assert(integer(state.nextIncident, 1) && Array.isArray(state.sourceDecisions));

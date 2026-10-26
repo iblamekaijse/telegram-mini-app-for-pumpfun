@@ -1,3 +1,4 @@
+import { emptyTelegramState } from './telegram-state.mjs';
 // OFFLINE: saved provider response shape with explicitly TEST prices; temporary SQLite only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -152,14 +153,14 @@ test('replay of entry, stale/future/out-of-order observations and other pool/min
 test('v3 SQLite migrates losslessly without converting legacy rules into positions', async t => {
   const c = await setup(t, { enter: false }); c.service.command(c.id, 'revoke', { requestId: 'legacy-final-revoke' }); c.detach();
   const storagePath = join(c.dataDir, 'state.sqlite'), db = new DatabaseSync(storagePath);
-  const saved = JSON.parse(db.prepare('SELECT payload FROM snapshot').get().payload); saved.version = 3; delete saved.positions;
+  const saved = JSON.parse(db.prepare('SELECT payload FROM snapshot').get().payload); saved.version = 3; delete saved.positions; delete saved.telegram;
   delete saved.rules[0][1].config.position; delete saved.rules[0][1].config.panel.input.position;
   const create = saved.commands.find(([, c]) => JSON.parse(c.fingerprint).action === 'create')[1];
   const command = JSON.parse(create.fingerprint); delete command.config.position; delete command.config.panel.input.position; create.fingerprint = canonical(command);
   const payload = JSON.stringify(saved); db.prepare('UPDATE snapshot SET payload=?,sha256=?').run(payload, createHash('sha256').update(payload).digest('hex')); db.close();
   const restored = await createPanelService(c.options); assert.equal(restored.state().rules[0].state, 'revoked'); assert.deepEqual(restored.state().positions, []); restored.close();
   const raw = new DatabaseSync(storagePath), upgraded = JSON.parse(raw.prepare('SELECT payload FROM snapshot').get().payload); raw.close();
-  assert.deepEqual(upgraded, { ...saved, version: 4, positions: [] });
+  assert.deepEqual(upgraded, { ...saved, version: 5, positions: [], telegram: emptyTelegramState() });
 });
 
 test('explicit condition-only scenario never creates a position, even with TP/SL form values present', async t => {

@@ -1,3 +1,4 @@
+import { emptyTelegramState, validateTelegramState } from './telegram-state.mjs';
 import { SimulatedExecutor } from './simulator.mjs';
 import { SnapshotStore, StorageError } from './snapshot-store.mjs';
 import { emptySnapshot, validateSnapshot } from './state-schema.mjs';
@@ -39,6 +40,7 @@ export class RuleEngine {
   #rules = new Map();
   #operations = new Map();
   #positions = new Map();
+  #telegram = emptyTelegramState();
   #startedAt;
   #commands = new Map();
   #events = new Map();
@@ -71,6 +73,7 @@ export class RuleEngine {
         this.#rules = new Map(state.rules);
         this.#operations = new Map(state.operations);
         this.#positions = new Map(state.positions);
+        this.#telegram = state.telegram;
         this.#commands = new Map(state.commands);
         this.#events = new Map(state.events);
         this.#streams = new Map(state.streams);
@@ -120,7 +123,7 @@ export class RuleEngine {
 
   #snapshot() {
     return {
-      version: 4, positions: [...this.#positions], nextOperation: this.#nextOperation, nextIncident: this.#nextIncident,
+      version: 5, telegram: this.#telegram, positions: [...this.#positions], nextOperation: this.#nextOperation, nextIncident: this.#nextIncident,
       rules: [...this.#rules], operations: [...this.#operations],
       commands: [...this.#commands], events: [...this.#events],
       streams: [...this.#streams],
@@ -132,6 +135,13 @@ export class RuleEngine {
     this.#healthy();
     try { this.#store?.save(this.#snapshot(), { beforeCommit }); }
     catch (error) { this.#storageFailure = error; throw error; }
+  }
+
+  getTelegramState() { this.#healthy(); return structuredClone(this.#telegram); }
+
+  saveTelegramState(value) {
+    this.#healthy(); validateTelegramState(value);
+    this.#telegram = structuredClone(value); this.#checkpoint();
   }
 
   close() {

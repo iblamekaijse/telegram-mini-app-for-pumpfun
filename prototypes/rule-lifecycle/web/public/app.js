@@ -71,6 +71,7 @@ function updateControls() {
   $('confirm-revoke').disabled = busy || !connected;
   $('create-form').querySelector('button[type=submit]').setAttribute('aria-busy', String(busy));
   $('send-price').setAttribute('aria-busy', String(busy));
+  renderTelegram();
   $('connection-text').textContent = connected ? 'Сохранено локально' : 'Нет связи с сервером';
   $('connection-dot').classList.toggle('offline', !connected);
   if (!connected && !$('market-card').hidden) $('market-status').textContent = 'Нет связи с панелью';
@@ -240,7 +241,8 @@ function renderPositions() {
   $('position-history-list').innerHTML = closed.map(p => `<details class="position-record"><summary>${escape(p.binding.mint)} · ${exitLabels[p.exit.reason]} · ${escape(displayDecimal(p.display.pnlUsd))} USD · ${escape(displayDecimal(p.display.pnlPercent))}%</summary><p class="help">${escape(p.id)}<br>Пул: ${escape(p.binding.pairAddress)}<br>Сумма ${escape(p.display.amount)} USD · количество ${escape(p.display.quantity)} · вход ${escape(p.display.entry)} USD · выход ${escape(p.display.price)} USD<br>Вход ${date(p.entry.receivedAtMs)}, выход ${date(p.exit.snapshot.receivedAtMs)}. Основания и точные дроби сохранены в SQLite.</p></details>`).join('');
 }
 function render(data, force = false) {
-  model = data; connected = true;
+  model = data;
+  renderTelegram(); connected = true;
   const next = JSON.stringify([data.currentRuleId, data.rules, data.positions, data.market, Math.floor(data.now / 1000)]);
   if (force || next !== signature) {
     signature = next;
@@ -339,3 +341,15 @@ $('find-token').addEventListener('click', () => {
   mutate('/api/market/select', { mint: $('mint').value.trim() }, { message: 'Источник загружен. Укажите своё тестовое условие в USD, создайте и включите правило.' });
 });
 load(); setInterval(() => { if (!busy) load(); }, 2000);
+
+function renderTelegram() {
+  const t = model?.telegram; if (!t) return;
+  const states = { disabled: 'Не настроен: добавьте TELEGRAM_BOT_TOKEN в локальный .env по инструкции', connecting: 'Подключение…', connected: 'Соединение работает', retrying: 'Telegram недоступен; повторим подключение', token_error: 'Ошибка доступа к боту: проверьте токен и права', conflict: 'Другой экземпляр получает updates: остановите его', storage_error: 'Ошибка хранения Telegram: действия остановлены' };
+  $('telegram-status').textContent = `${states[t.connection] ?? t.connection}. ${t.linked ? 'Владелец привязан' : 'Владелец не привязан'}. В очереди: ${t.queued}; не доставлено: ${t.failed}.`;
+  $('telegram-code').disabled = busy || !connected || !t.configured || t.linked;
+  $('telegram-unlink').disabled = busy || !connected || !t.linked && !t.codeExpiresAtMs;
+  if (t.linked || !t.codeExpiresAtMs || t.codeExpiresAtMs <= model.now) $('telegram-link').textContent = '';
+  if (model.telegramLink) $('telegram-link').textContent = `В личном чате своего бота отправьте /start ${model.telegramLink.code} (до ${time(model.telegramLink.expiresAtMs)}). Код одноразовый; не передавайте его другим.`;
+}
+$('telegram-code').addEventListener('click', () => mutate('/api/telegram/code', {}));
+$('telegram-unlink').addEventListener('click', () => mutate('/api/telegram/unlink', {}, { message: 'Привязка отключена. Старые кнопки больше не дают доступа.' }));

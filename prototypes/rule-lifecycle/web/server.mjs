@@ -1,3 +1,4 @@
+import { TelegramTransport, runTelegram } from './telegram.mjs';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
@@ -19,8 +20,8 @@ const staticFiles = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']],
 ]);
-export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173, marketFetch = fetch, clock = Date.now } = {}) {
-  const service = await createPanelService({ dataDir, marketFetch, clock });
+export async function startPanel({ dataDir = resolve(directory, '../.local-web'), port = 4173, marketFetch = fetch, clock = Date.now, telegramToken = process.env.TELEGRAM_BOT_TOKEN ?? '', telegramTransport } = {}) {
+  const service = await createPanelService({ dataDir, marketFetch, clock, telegramConfigured: !!(telegramToken || telegramTransport) });
   let mutations = Promise.resolve();
   const serial = fn => { const result = mutations.then(fn); mutations = result.catch(() => {}); return result; };
   const server = createServer(async (req, res) => {
@@ -51,6 +52,8 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
       const positionMatch = url.pathname.match(/^\/api\/positions\/([a-zA-Z0-9_-]+)\/close$/);
       const match = url.pathname.match(/^\/api\/rules\/([a-zA-Z0-9_-]+)\/([a-z_-]+)$/);
       const result = await serial(() => {
+        if (url.pathname === '/api/telegram/code') return { ...service.state(), telegramLink: service.telegram.createCode() };
+        if (url.pathname === '/api/telegram/unlink') { service.telegram.unlink(); return service.state(); }
         if (url.pathname === '/api/market/select') return service.selectMarket(body);
         if (url.pathname === '/api/rules') return service.create(body);
         if (positionMatch) return service.closePosition(positionMatch[1], body);
@@ -69,6 +72,7 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
   });
   try { await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolveListen); }); }
   catch (error) { service.close(); throw error; }
+  const bot = telegramToken || telegramTransport ? runTelegram({ controller: service.telegram, transport: telegramTransport ?? new TelegramTransport(telegramToken), serial }) : null;
   let polling = false, closing = false;
   const timer = setInterval(() => {
     if (polling || closing) return;
@@ -81,6 +85,7 @@ export async function startPanel({ dataDir = resolve(directory, '../.local-web')
   timer.unref();
   return { url: `http://127.0.0.1:${server.address().port}`, close: async () => {
     closing = true; clearInterval(timer);
+    await bot?.close();
     await new Promise((done, fail) => server.close(error => error ? fail(error) : done()));
     await mutations; service.close();
   } };

@@ -1,3 +1,4 @@
+import { TelegramController } from './telegram.mjs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { RuleEngine } from '../rule-engine.mjs';
@@ -32,7 +33,7 @@ function money(value, field) {
 }
 
 /** Thin local UI adapter. All rule/operation decisions remain in RuleEngine. */
-export async function createPanelService({ dataDir, clock = Date.now, marketFetch = fetch }) {
+export async function createPanelService({ dataDir, clock = Date.now, marketFetch = fetch, telegramConfigured = false }) {
   let initialize = false;
   try { mkdirSync(dataDir); initialize = true; }
   catch (error) { if (error.code !== 'EEXIST') throw error; }
@@ -75,6 +76,7 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     } else if (current()) await consumerFor(current().config.id).drain();
   } catch (error) { engine.close(); throw error; }
 
+  let telegram;
   function requireRule(id) {
     if (!rules().some(rule => rule.config.id === id)) throw new PanelError('RULE_NOT_FOUND', 'Правило не найдено.', {}, 404);
     return engine.getRule(id);
@@ -87,7 +89,7 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
       return { ...p, valuationAvailable: p.status === 'closed' || currentValuation,
         display: Object.fromEntries(Object.entries(values).map(([key, value]) => [key, formatRational(value, key === 'quantity' ? 12 : 9)])) };
     });
-    return { mode: 'demo', liveTradingAllowed: false, now: clock(), market: selected, positions, currentRuleId: current()?.config.id ?? null,
+    return { mode: 'demo', liveTradingAllowed: false, telegram: telegram?.status(), now: clock(), market: selected, positions, currentRuleId: current()?.config.id ?? null,
       rules: rules().map(rule => ({ ...rule, stream: rule.config.market ? { kind: 'snapshots', continuity: 'not_asserted', connected: market.state().status === 'fresh' } : engine.getSourceState(rule.config.id),
         events: engine.getEventLog(rule.config.id), operations: rule.operationIds.map(id => engine.getOperation(id)),
         decisions: engine.getSourceDecisionLog(rule.config.id) })) };
@@ -206,8 +208,13 @@ export async function createPanelService({ dataDir, clock = Date.now, marketFetc
     if (result.limited) throw new PanelError('MARKET_RATE_LIMIT', 'Следующий запрос будет доступен после показанного времени опроса.', {}, 429);
     return recordMarket(result);
   }
-  return { state, create, price, command, selectMarket,
-    closePosition: (id, body) => { engine.requestPositionClose(id, { requestId: `close:${requestKey(body.requestId)}` }); return state(); },
-    pollMarket: async () => current() && !current().config.market && !['finished', 'expired', 'revoked'].includes(current().state) ? state() : recordMarket(await market.poll()),
+  const closePosition = (id, body) => { engine.requestPositionClose(id, { requestId: `close:${requestKey(body.requestId)}` }); return state(); };
+  telegram = new TelegramController({ engine, view: state, command, closePosition, clock, configured: telegramConfigured });
+  telegram.resume();
+  const sync = fn => (...args) => { try { return fn(...args); } finally { telegram.reconcile(); } };
+  const asyncSync = fn => async (...args) => { try { return await fn(...args); } finally { telegram.reconcile(); } };
+  return { state, telegram, create: sync(create), price: asyncSync(price), command: sync(command), selectMarket: asyncSync(selectMarket),
+    closePosition: sync(closePosition),
+    pollMarket: asyncSync(async () => current() && !current().config.market && !['finished', 'expired', 'revoked'].includes(current().state) ? state() : recordMarket(await market.poll())),
     close: () => engine.close() };
 }

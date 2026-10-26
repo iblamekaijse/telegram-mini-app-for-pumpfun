@@ -1,6 +1,6 @@
 # Передача локального DEMO
 
-Текущая ветка рыночной интеграции: **`codex/pumpswap-price-snapshots`**, база — `origin/main` / `12801554c90f3f07e699b828729d36900a220972`. Первоначальная поставка ядра/панели была сохранена коммитом `454fa48` в PR №1; GitHub показывает его слитым. Новые изменения передаются отдельным связанным PR, без самостоятельного слияния в main. До первоначальной поставки исходники находились только в рабочей Cloud-среде и не были добавлены в Git.
+Текущий результат: **`codex/virtual-position-lifecycle`**, существующий PR №3 с базой `codex/pumpswap-price-snapshots`. Включает рыночные снимки, виртуальные позиции и обычного Telegram-бота. Самостоятельного слияния в main нет. [Подключение Telegram и одна итоговая приёмка](prototypes/rule-lifecycle/web/TELEGRAM.md).
 
 ## Что сохранено в ветке
 
@@ -49,7 +49,7 @@ bash /tmp/demo-nvm-install.sh
 nvm install 24.19.0
 nvm alias default 24.19.0
 cd ~
-git clone --branch codex/pumpswap-price-snapshots --single-branch https://github.com/iblamekaijse/telegram-mini-app-for-pumpfun.git
+git clone --branch codex/virtual-position-lifecycle --single-branch https://github.com/iblamekaijse/telegram-mini-app-for-pumpfun.git
 cd telegram-mini-app-for-pumpfun
 git rev-parse HEAD
 node --version
@@ -78,53 +78,32 @@ npm start
 В отдельной связанной ветке и PR добавлен режим рыночных снимков DEX Screener для индексируемых пулов PumpSwap токен/WSOL. Кошельки/торговое исполнение не подключаются. [Пошаговая инструкция и границы источника](prototypes/rule-lifecycle/web/MARKET_DATA.md). Команда запуска прежняя, Node.js 24.19.0; серверный запуск теперь учитывает штатные proxy-настройки среды.
 
 
-## Обновление существующей WSL-установки из detached HEAD
+<a id="update"></a>
+## Обновление существующей WSL-установки
 
-Сначала остановите свой `npm start` через **Ctrl+C**. Команды ниже запускаются в Ubuntu/WSL из любого каталога внутри существующего checkout. Node.js остаётся **24.19.0**, npm install не нужен.
-
-`git status --short` позволяет увидеть собственные правки исходников. Сохраните их перед обновлением; команды не используют reset/clean или принудительное переключение. При конфликте переключения они остановятся, сохранив файлы. Текущий detached commit получает резервную ветку. Новый checkout создаётся в отдельной локальной ветке от полученной версии PR №2. Настройки скачивания дополнены, чтобы работала и ранее созданная single-branch копия.
-
-```bash
-(
-  set -e
-  cd "$(git rev-parse --show-toplevel)"
-  git status --short
-  PANEL_UPDATE_STAMP=$(date +%Y%m%d-%H%M%S)
-  git branch "backup/panel-before-$PANEL_UPDATE_STAMP" HEAD
-  git remote set-branches --add origin codex/pumpswap-price-snapshots
-  git fetch origin
-  git switch --create "local/panel-update-$PANEL_UPDATE_STAMP" --track origin/codex/pumpswap-price-snapshots
-  git rev-parse HEAD
-  cd prototypes/rule-lifecycle
-  npm start
-)
-```
-
-Сравните выведенный полный hash с итоговым сообщением о передаче. `.local-web` остаётся в прежнем каталоге; она игнорируется Git, не удаляется и не пересоздаётся этой процедурой. Если использовался собственный DEMO_DATA_DIR, сохраните прежнюю настройку окружения. После запуска обновите браузер на том же Windows-компьютере: **http://localhost:4173**. Это не внешний Cloud-адрес. Сам запуск этих команд на компьютере пользователя здесь не проверялся.
-
-## Обновление до виртуальных позиций (отдельный PR с базой PR №2)
-
-Ветка этого этапа: **codex/virtual-position-lifecycle**, база **codex/pumpswap-price-snapshots**. Запуск остаётся `npm start`, Node.js **24.19.0**, без npm install. [Инструкция панели](prototypes/rule-lifecycle/web/VIRTUAL_POSITIONS.md).
-
-Сначала остановите сервер Ctrl+C. Команды из любого каталога существующего checkout в WSL, в том числе из detached HEAD. Сначала сохраните собственные незакоммиченные исходники, если `git status` их показывает. Создаются резервная ссылка на текущий commit и **копия стандартной .local-web вне репозитория** перед lossless-миграцией v3 → v4; история не удаляется. Если используется свой `DEMO_DATA_DIR`, скопируйте именно этот каталог при остановленном сервере и сохраните прежнюю настройку для запуска.
+Остановите сервер Ctrl+C. Команды ниже выполняются в Ubuntu/WSL внутри существующего checkout, включая detached HEAD. Нужен Node.js 24.19.0, установка npm-пакетов не требуется. Сохраняются ссылка на текущий commit и копия данных вне checkout **до миграции в SQLite v5**. Собственные правки не перезаписываются: при непустом `git status` процедура останавливается; сохраните их самостоятельно перед повтором. Если `DEMO_DATA_DIR` задан через `.env`, сначала экспортируйте в текущую оболочку тот же абсолютный путь без токенов: резервная копия должна соответствовать фактической базе.
 
 ```bash
 (
   set -e
   cd "$(git rev-parse --show-toplevel)"
-  git status --short
-  PANEL_UPDATE_STAMP=$(date +%Y%m%d-%H%M%S)
-  git branch "backup/panel-before-positions-$PANEL_UPDATE_STAMP" HEAD
-  if [ -d prototypes/rule-lifecycle/.local-web ]; then
-    cp -a prototypes/rule-lifecycle/.local-web "$HOME/panel-data-before-v4-$PANEL_UPDATE_STAMP"
+  if [ -n "$(git status --porcelain)" ]; then
+    git status --short
+    echo "Сначала сохраните собственные изменения; обновление остановлено."
+    exit 1
   fi
-  git remote set-branches --add origin codex/virtual-position-lifecycle
-  git fetch origin
-  git switch --create "local/positions-$PANEL_UPDATE_STAMP" --track origin/codex/virtual-position-lifecycle
+  PANEL_UPDATE_STAMP=$(date +%Y%m%d-%H%M%S)
+  PANEL_BACKUP_DIR=$(mktemp -d "$HOME/panel-backup-$PANEL_UPDATE_STAMP-XXXXXX")
+  PANEL_DATA_DIR=${DEMO_DATA_DIR:-prototypes/rule-lifecycle/.local-web}
+  if [ -d "$PANEL_DATA_DIR" ]; then cp -a "$PANEL_DATA_DIR" "$PANEL_BACKUP_DIR/data"; fi
+  git branch "backup/before-telegram-$PANEL_UPDATE_STAMP" HEAD
+  git fetch origin refs/heads/codex/virtual-position-lifecycle:refs/remotes/origin/codex/virtual-position-lifecycle
+  git switch --create "local/telegram-$PANEL_UPDATE_STAMP" --track origin/codex/virtual-position-lifecycle
   git rev-parse HEAD
+  echo "Копия данных: $PANEL_BACKUP_DIR"
   cd prototypes/rule-lifecycle
   npm start
 )
 ```
 
-Сравните hash с переданным коммитом. Перейдите **http://localhost:4173** на том же Windows-компьютере; адрес доступен только компьютеру с сервером. Не запускайте старый код на обновлённой v4-базе: прежняя версия её не поддерживает. Резервная копия нужна для отдельного отката вместе со старым кодом, а не для смешивания историй. Публикация PR не размещает приложение в интернете. Сам компьютер пользователя недоступен в этой среде; поведение миграции проверено в Linux на временных SQLite.
+Проверьте полный hash из сообщения передачи. Стандартная `.local-web` остаётся на месте; она не удаляется и не становится пустой. Для нестандартного `DEMO_DATA_DIR` сохраняйте прежнюю настройку и проверяйте путь резервной копии до запуска. Новая версия открывает v1…v4 и сохраняет историю в v5; старый код v5 не читает. При откате не смешивайте обновлённую базу и старые файлы: используйте отдельную сохранённую копию при остановленном сервере. Токен настраивается локально по [TELEGRAM.md](prototypes/rule-lifecycle/web/TELEGRAM.md); секреты не добавляются в Git и не отправляются в чат. Windows/WSL пользователя здесь не проверены.
